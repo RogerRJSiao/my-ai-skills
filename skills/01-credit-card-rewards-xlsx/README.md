@@ -14,7 +14,9 @@
 ├── requirements.txt                   ← Python 環境依賴套件
 ├── references/
 │   ├── column_rules.md                ← 10 欄位定義與填寫規則
-│   └── merchant_normalize.md         ← 商家名稱標準化 & 同義對照表
+│   ├── merchant_normalize.md          ← 商家名稱標準化 & 同義對照表
+│   ├── organize_skills_for_credit_cards_reward_by_Claude_Code_AI.pdf  ← AI 對話紀錄
+│   └── organize_skills_for_credit_cards_reward_by_Google_Gemini_AI.pdf ← AI 對話紀錄
 ├── scripts/
 │   └── build_xlsx.py                  ← 可直接執行的輸出腳本
 ├── assets/
@@ -22,10 +24,10 @@
 │   └── 信用卡回饋方案整理_sample.xlsx  ← ✅ 實際輸出範例（550筆，4張卡）
 └── sample-data/
     ├── README.md                      ← PDF 放置說明
-    ├── bank_a_rewards.pdf             ← 放置您的 PDF（不納入版控）
-    ├── bank_b_rewards.pdf
-    ├── bank_c_rewards.pdf
-    └── bank_d_rewards.pdf
+    ├── bank_台新Richart_rewards.pdf   ← ✅ 納入版控（公開優惠頁）
+    ├── bank_聯邦Line點_rewards.pdf
+    ├── bank_國泰CUBE_rewards.pdf
+    └── bank_中信AllMe_rewards.pdf
 ```
 
 ---
@@ -62,7 +64,7 @@ pip install -r requirements.txt
 | C | 結束日 | 優惠結束日 (yyyy-mm-dd) |
 | D | 商家名稱 | 合作商家或通路描述 |
 | E | 回饋%數 | 數字加%，如 `3%` |
-| F | 方案切換 | 需切換方案者填方案名，否則填「通用」 |
+| F | 方案切換 | 需切換方案填方案名；需綁定支付工具填工具名（如 `LINE Pay`）；一般持卡即享填「通用」 |
 | G | 相同商家 | 跨卡重複商家標記 `Exist`（淡黃底） |
 | H | 最高回饋 | 同商家中最高回饋率標記 `Max`（淡綠底） |
 | I | 優惠備註 | 限制條件、方案說明等 |
@@ -75,5 +77,7 @@ pip install -r requirements.txt
 | 路徑 | 是否納入版控 |
 |------|------------|
 | `assets/信用卡回饋方案整理_sample.xlsx` | ✅ 是（輸出範本） |
-| `sample-data/*.pdf` | ❌ 否（原始資料） |
+| `sample-data/bank_*.pdf` | ✅ 是（公開優惠頁，無個資） |
+| `references/*.pdf` | ✅ 是（AI 對話紀錄等參考文件） |
+| `sample-data/*.pdf`（非 bank_ 開頭） | ❌ 否（原始資料） |
 | `outputs/*.xlsx` | ❌ 否（本地產出） |
