@@ -39,7 +39,35 @@
 
 ---
 
-## ▶️ 使用方式
+## ▶️ 使用模式
+
+### 模式一：手動貼貼 — 適合臨時處理 1-2 份 PDF
+
+如果你只是手動下載了 1-2 家銀行的新 PDF，想立刻讓 AI 轉成表格，可以直接在任何 AI 聊天介面操作，不需安裝任何工具。
+
+**操作步驟：**
+
+1. 打開你常用的 AI 聊天介面（Claude、ChatGPT 等皆可）
+2. 將以下三個檔案的文字內容全部複製貼給 AI（或直接拖入讓它讀取）：
+   - `SKILL.md`（告訴 AI 它是誰、要做什麼任務）
+   - `references/column_rules.md`（告訴 AI 欄位怎麼填）
+   - `references/merchant_normalize.md`（告訴 AI 商店名稱怎麼對齊）
+3. 同時上傳你想處理的銀行回饋 PDF（或複製網頁上的優惠文字貼給它）
+4. 最後加上這段 Prompt：
+
+```
+請擔任 SKILL.md 中定義的角色，嚴格遵循 column_rules.md 與 merchant_normalize.md
+的規範，分析我提供給你的這份銀行 PDF 資料，並直接為我輸出一張 Markdown 格式的
+資料表（包含那 10 個欄位）。
+```
+
+**產出結果：** AI 會直接在對話框輸出 Markdown 表格，全選複製後貼到 Excel 即完成。
+
+---
+
+### 模式二：自動化 Pipeline — 適合批次處理多份 PDF
+
+> **前置需求：** 需安裝 Python，並執行 `pip install -r requirements.txt`
 
 1. 將銀行優惠 PDF 放入 `sample-data/`
 2. 將 `SKILL.md` 全文貼給 AI，附上以下指令：
