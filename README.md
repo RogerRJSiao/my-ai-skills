@@ -37,10 +37,12 @@
 ## 🗂️ 版控規則說明
 
 ```
-納入版控   ✅  skills/**/assets/*.xlsx   （輸出範本）
+納入版控   ✅  skills/**/assets/*.xlsx        （輸出範本）
 納入版控   ✅  所有 .md、.py、.txt
-排除版控   ❌  outputs/*.xlsx            （本地產出）
-排除版控   ❌  sample-data/*.pdf         （原始資料）
+納入版控   ✅  skills/**/sample-data/bank_*.pdf   （公開優惠頁，無個資）
+納入版控   ✅  skills/**/references/*.pdf         （AI 對話紀錄等參考文件）
+排除版控   ❌  outputs/*.xlsx                （本地產出）
+排除版控   ❌  sample-data/*.pdf             （原始資料，bank_ 開頭除外）
 ```
 
 ---
