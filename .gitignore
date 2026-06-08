@@ -30,3 +30,5 @@ secrets.json
 skills/**/sample-data/*.pdf
 # 豁免 bank_ 開頭的公開優惠頁面 PDF（無個資）
 !skills/**/sample-data/bank_*.pdf
+# 豁免 references/ 內的 PDF（AI 對話紀錄等參考文件）
+!skills/**/references/*.pdf
