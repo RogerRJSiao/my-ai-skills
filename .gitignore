@@ -28,3 +28,5 @@ secrets.json
 
 # ── sample-data 內的 PDF（避免上傳銀行資料）──
 skills/**/sample-data/*.pdf
+# 豁免 bank_ 開頭的公開優惠頁面 PDF（無個資）
+!skills/**/sample-data/bank_*.pdf
