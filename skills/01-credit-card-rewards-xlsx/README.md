@@ -41,6 +41,16 @@
 
 ## ▶️ 使用模式
 
+**實作範例：**
+- 輸出結果：[信用卡回饋方案整理_sample.xlsx](./assets/信用卡回饋方案整理_sample.xlsx)
+- 來源 PDF（共 4 份）：
+  [bank_台新Richart_rewards.pdf](./sample-data/bank_台新Richart_rewards.pdf) ／
+  [bank_聯邦Line點_rewards.pdf](./sample-data/bank_聯邦Line點_rewards.pdf) ／
+  [bank_國泰CUBE_rewards.pdf](./sample-data/bank_國泰CUBE_rewards.pdf) ／
+  [bank_中信AllMe_rewards.pdf](./sample-data/bank_中信AllMe_rewards.pdf)
+
+---
+
 ### 模式一：手動貼貼 — 適合臨時處理 1-2 份 PDF
 
 如果你只是手動下載了 1-2 家銀行的新 PDF，想立刻讓 AI 轉成表格，可以直接在任何 AI 聊天介面操作，不需安裝任何工具。
@@ -49,9 +59,9 @@
 
 1. 打開你常用的 AI 聊天介面（Claude、ChatGPT 等皆可）
 2. 將以下三個檔案的文字內容全部複製貼給 AI（或直接拖入讓它讀取）：
-   - `SKILL.md`（告訴 AI 它是誰、要做什麼任務）
-   - `references/column_rules.md`（告訴 AI 欄位怎麼填）
-   - `references/merchant_normalize.md`（告訴 AI 商店名稱怎麼對齊）
+   - [`SKILL.md`](./SKILL.md)（告訴 AI 它是誰、要做什麼任務）
+   - [`references/column_rules.md`](./references/column_rules.md)（告訴 AI 欄位怎麼填）
+   - [`references/merchant_normalize.md`](./references/merchant_normalize.md)（告訴 AI 商店名稱怎麼對齊）
 3. 同時上傳你想處理的銀行回饋 PDF（或複製網頁上的優惠文字貼給它）
 4. 最後加上這段 Prompt：
 
