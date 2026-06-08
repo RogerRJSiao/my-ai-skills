@@ -23,6 +23,17 @@
 
 ---
 
+## 📂 各個 .md 檔案在 AI 提示詞中的角色對照
+
+| 檔案名稱 | 在 AI 提示詞（Prompt）中扮演的角色 |
+|---------|----------------------------------|
+| `SKILL.md` | **System Prompt（系統設定）**。定義 AI 的專家身份、核心工作流（Pipeline）與思考邏輯。 |
+| `column_rules.md` | **Few-Shot / Data Constraints（資料約束）**。限制 AI 不可以瞎編欄位，嚴格規範欄位格式（例如：數值要百分比還是整數）。 |
+| `merchant_normalize.md` | **Knowledge Base / Context（知識庫）**。AI 常把「臺灣酷朋」和「Coupong」當成不同公司，這份能強制 AI 做同義詞對齊。 |
+| `template_spec.md` | **Formatting Style（格式視覺規範）**。如果用模式二叫 AI 寫網頁或 Google 試算表工具，這份可以用來控制前端 UI 的顏色與排版。 |
+
+---
+
 ## 📋 專案規範
 
 - 每個 Skill 必須包含：`README.md`、`SKILL.md`
