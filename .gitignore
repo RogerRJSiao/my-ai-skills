@@ -1,0 +1,30 @@
+# ── 輸出檔案（本地測試產出，不納入版控）──
+outputs/
+**/outputs/
+
+# ── assets 內的 xlsx 範本【保留】，其餘 xlsx 排除 ──
+*.xlsx
+!skills/**/assets/*.xlsx
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# ── 系統 / 編輯器 ──
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# ── 敏感資料 ──
+.env
+secrets.json
+
+# ── sample-data 內的 PDF（避免上傳銀行資料）──
+skills/**/sample-data/*.pdf
