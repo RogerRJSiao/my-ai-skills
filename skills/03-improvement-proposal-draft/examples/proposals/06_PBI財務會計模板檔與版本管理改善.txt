@@ -1,0 +1,20 @@
+提案名稱(20字) 【品質/效率】
+
+PBI財務會計模板檔與版本管理改善
+
+現狀缺失
+
+原有的「三角與非三角合併」Power BI報表(v3版)透過PostgreSQL Direct Query串接taxdbar、taxdbah_tri兩表，但SQL查詢語句未帶入篩選條件，導致每次重新整理都會撈取全部年月、全部子公司的資料，才在Power Query端篩選或加工。
+取得完整資料集載入pbix，造成時間成本增加、記憶體耗用上升，甚至發生查詢逾時(57014: canceling statement due to statement timeout)，Power BI報表重新整理不成功。
+
+改善內容
+
+為了縮短BI報表整理時間、降低資料庫查詢負擔，將篩選邏輯改為源頭篩選(查詢下推)於SQL端執行，並依部門需求切分欄位範圍：
+
+1. 源頭篩選優化(篩選交給資料庫先做)：把年月、公司別等參數組成SQL的WHERE子句，直接用作查詢字串。讓資料庫能用索引在源頭就先篩選好，使EnableFolding=true真正發揮效果，不再撈取整張表的資料。
+2. 建立分支版本(依部門需求各取所需)：完整47欄位版本(v3.1_full)供跨部門使用，財務單位可用27欄位版本(v3.1_finance)，減少開啟報表時重新載入的時間。其餘20欄註解保留、非刪除，未來也可隨時復原或擴充。
+3. 標上註解分段(提高程式碼可讀性)：根據欄位屬性，在Power Query內加上段落註解，如維度欄位、銷售數量與金額、產品屬性、銷售型態與單位分類等，讓使用者或工程師排查時，能快速定位每個欄位所屬的類別與意義，降低日後維護與交接的理解成本。
+4. 命名與版控規則制定(版本一目了然)：制定v{主版號}.{次版號}_{欄位模式}.pbix命名規則，並建立單一的CHANGELOG記錄每版上線日期與改動內容，方便日後交接與追溯。
+
+相關檔案：v3.1_full.pbix、v3.1_finance.pbix（建大知識中心 > Power BI > BI Report > Financial & Accounting）
+https://kendatire.sharepoint.com/:f:/s/msteams_d62f2a/IgDr0E8aafUnSoySpSI7zuOKAeFEQqtESxCqCXroAu2wf3w?e=jPn0SV
