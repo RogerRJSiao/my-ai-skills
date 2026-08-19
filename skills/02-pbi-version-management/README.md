@@ -98,6 +98,7 @@ cp -r pbi-version-management <你的專案路徑>/.claude/skills/
 ```
 pbi-version-management/
 ├── SKILL.md                          # 主要規則：命名規範、版號判斷標準、檢查清單、工作流程
+├── assets/                           # 實作範例
 └── references/
     └── changelog_template.md         # CHANGELOG.md 空白模板，可直接複製套用到新專案
 ```
