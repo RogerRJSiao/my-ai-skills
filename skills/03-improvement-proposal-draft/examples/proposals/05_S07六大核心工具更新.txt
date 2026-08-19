@@ -1,0 +1,12 @@
+提案名稱
+S07教育訓練IATF六大核心工具更新
+
+現狀缺失
+目前在「S07建大品質系統概念」的教材中，PPT p.15有提到IATF五大核心工具(五個品質工具)，分別是APQP、FMEA、MSA、SPC、PPAP，但管制計畫(Quality Control Plan)被列在APQP下方、並非單獨列出。
+
+改善建議
+參考推廣IATF 16949的相關網站，如美國AIAG協會、驗證機構SGS，可以得知現在的不只有「五大核心工具」，主因是近期CP (Control Plan)受到重視而被認定為第六個核心工具。
+故建請調整PPT五大核心工具內容說明，讓產品開發到生產過程中與APQP、FMEA密切相關的CP，能並列為IATF 16949的「六大核心工具」。
+
+
+IATF六大核心工具：APQP、CP、FMEA、MSA、SPC、PPAP。
