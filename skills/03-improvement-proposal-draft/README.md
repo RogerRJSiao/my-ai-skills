@@ -33,17 +33,15 @@ improvement-proposal-draft/
     │
     ├── materials/                     # 改善前的佐證素材(依提案主題分子資料夾)
     │   └── pbi-financial-template/
-    │       ├── v3.txt
-    │       ├── v3.1_full.txt
-    │       ├── v3.1_finance.txt
     │       ├── CHANGELOG_Finance_Accounting.md
     │       └── timeout-error-screenshot.png
     │
     ├── deliverables/                  # 改善後的實作成果(同樣依提案主題分子資料夾)
     │   └── pbi-financial-template/
-    │       └── README.md              # 目前僅有SharePoint連結，尚無實體檔案
+    │       └── 改善提案表.txt          # 該主題最終送出的改善提案表
     │
     └── official-form/                 # 正式系統的申請表單截圖(通用參考，非特定提案)
+        ├── README.md
         ├── 申請表單畫面.png            # 完整欄位配置(提案名稱/現狀缺失/改善內容/效益分析等)
         └── 分類下拉選單.png            # 完整9種分類選項
 ```
