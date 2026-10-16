@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "kd-training-internal": {
+      "type": "stdio",
+      "command": "mcp-server/.venv/Scripts/python.exe",
+      "args": ["-m", "kd_mcp.servers.training_internal"]
+    }
+  }
+}

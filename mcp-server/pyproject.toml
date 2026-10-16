@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kd-mcp"
+version = "0.2.0"
+description = "MCP servers exposing my-ai-skills automation (training grading, ...) as tools"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=2.3,<3",
+]
+
+[project.optional-dependencies]
+# Grading engines for Office formats (xlsx_s06; later docx/pptx engines).
+office = ["openpyxl>=3.1"]
+dev = ["pytest>=8"]
+
+# One entry point per server.
+[project.scripts]
+kd-training-internal = "kd_mcp.servers.training_internal.__main__:main"
+kd-training-external = "kd_mcp.servers.training_external.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+addopts = "--import-mode=importlib"
