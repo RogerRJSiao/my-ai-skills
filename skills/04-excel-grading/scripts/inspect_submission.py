@@ -21,7 +21,7 @@ import json
 import zipfile
 import argparse
 import xml.etree.ElementTree as ET
-from pathlib import Path
+from pathlib import PurePosixPath
 
 try:
     import openpyxl
@@ -187,7 +187,10 @@ def chart_info(zf, sheet_index):
             break
     if drawing_target is None:
         return None
-    drawing_rels_path = str(Path(drawing_target).parent / "_rels" / (Path(drawing_target).name + ".rels"))
+    # zip member names always use "/", so build the path with PurePosixPath
+    # (Path on Windows would produce backslashes and never match).
+    d = PurePosixPath(drawing_target)
+    drawing_rels_path = str(d.parent / "_rels" / (d.name + ".rels"))
     try:
         d_rels_root = ET.fromstring(zf.read(drawing_rels_path))
     except KeyError:
