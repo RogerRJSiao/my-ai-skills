@@ -1,0 +1,10 @@
+# ── 04-excel-grading 專屬規則（repo 根目錄 .gitignore 的通則仍然適用）──
+
+# assets 子資料夾（00_input / 01_template / 03_results）裡的 xlsx 樣板【保留】
+# 根目錄只保留 assets/ 第一層的 xlsx
+!assets/**/*.xlsx
+
+# 02_work 是評閱工作區（學員作業副本），內容一律排除，只保留 .gitkeep 維持資料夾結構
+assets/02_work/**
+!assets/02_work/**/
+!assets/02_work/**/.gitkeep
