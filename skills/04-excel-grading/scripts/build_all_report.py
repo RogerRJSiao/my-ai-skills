@@ -38,9 +38,7 @@ all_report rules):
   name's 工號. 總分 / 是否合格 are left as in the template.
 Only the template copy is written; inputs are only read.
 
-The MCP server (kd_mcp.core.grading.manifest / all_report) imports this file
-for the manifest and roster rules, so the helpers raise ValueError instead of
-exiting and only main() needs init_batch.py.
+Helpers raise ValueError; main() turns it into the exit message.
 
 Usage:
     python build_all_report.py --batch 202609
@@ -204,7 +202,7 @@ def write_manifest_sheet(ws, rows: list[list]):
     ws.auto_filter.ref = f"A1:{get_column_letter(len(MANIFEST_HEADERS))}{len(rows) + 1}"
 
 
-# ── per-student notes (same rules as the MCP server's all_report) ─────────
+# ── per-student notes ─────────
 
 EXT_BY_SUBJECT = {"Excel": "xlsx", "Word": "docx", "PPT": "pptx"}
 SCORE_CAP = 100
