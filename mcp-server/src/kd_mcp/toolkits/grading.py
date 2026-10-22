@@ -1,13 +1,13 @@
-"""Training-grading toolkit: one set of tools that serves every skill of a
-domain (training_internal, training_external, ...).
+"""Grading toolkit: one set of grading tools that serves every skill of a
+domain (training_internal = 內訓, training_external = 外訓, ...).
 
 Which skills exist, which file formats they take and which engine grades
 them all come from skills/*/skill.toml (core.registry); this module only
 exposes them over MCP. Mount it with a prefix per server:
 
-    register(mcp, domain="training_internal", prefix="ti", data_root=..., output=...)
-    -> ti_list_skills, ti_get_rubric, ti_list_submissions,
-       ti_inspect_submission, ti_grade_submission, ti_write_results
+    register(mcp, domain="training_internal", prefix="gi", data_root=..., output=...)
+    -> gi_list_skills, gi_get_rubric, gi_list_submissions,
+       gi_inspect_submission, gi_grade_submission, gi_write_results
 """
 from __future__ import annotations
 
@@ -18,10 +18,10 @@ from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel, Field
 
 from ..core.config import default_skills_dir
-from ..core.grading import GradeResult, apply_overrides, parse_filename
-from ..core.grading.engines import engine_status, get_engine, known_engines
+from ..core.grading import apply_overrides, parse_filename
+from ..core.grading.engines import engine_status, get_engine
 from ..core.logging import AuditLogger
-from ..core.registry import SkillSpec, for_domain, scan
+from ..core.registry import for_domain, scan
 from ..core.security import PathPolicy
 from ..runtime.tooling import audited
 
@@ -45,7 +45,7 @@ class StudentInput(BaseModel):
 SkillArg = Annotated[str, Field(description="Skill id from <prefix>_list_skills, e.g. 04-excel-grading.")]
 
 
-def instructions(prefix: str, domain: str) -> str:
+def instructions(prefix, domain):
     return f"""\
 Grading tools for the {domain} skills of the my-ai-skills repo.
 
@@ -60,44 +60,35 @@ output folder.
 """
 
 
-def _overrides(raw: dict[str, ItemOverride] | None) -> dict:
+def _overrides(raw):
     return {k: v.model_dump(exclude_none=True) for k, v in (raw or {}).items()}
 
 
-def register(
-    mcp: MCPServer,
-    *,
-    domain: str,
-    prefix: str,
-    data_root: Path,
-    output: Path,
-    skills_dir: Path | None = None,
-    extra_read_dirs: tuple[Path, ...] = (),
-    audit: AuditLogger | None = None,
-) -> None:
+def register(mcp, *, domain, prefix, data_root, output, skills_dir=None, extra_read_dirs=(), audit=None):
     skills_dir = Path(skills_dir or default_skills_dir()).resolve()
     policy = PathPolicy.build(data_root=data_root, output=output, skills_dir=skills_dir,
                               extra_read_dirs=extra_read_dirs)
-    all_specs, all_issues = scan(skills_dir, known_engines())
+    all_specs, all_issues = scan(skills_dir)
     specs = for_domain(all_specs, domain)
     issues = [i for i in all_issues if i.domain in (domain, None)]
 
-    def spec_of(skill: str) -> SkillSpec:
+    def spec_of(skill):
         spec = specs.get(skill)
         if spec is None:
             available = "、".join(specs) or "（無）"
             raise ValueError(f"skill「{skill}」不屬於本 server（domain={domain}）。可用的 skill：{available}")
         return spec
 
-    def grade(spec: SkillSpec, submission_path: str, overrides: dict | None) -> GradeResult:
-        engine = get_engine(spec.engine)
+    def grade(spec, submission_path, overrides):
+        engine = get_engine(spec.engine, spec.engine_path)
         sub = policy.read(submission_path)
         if sub.suffix.lower().lstrip(".") not in spec.formats:
             raise ValueError(f"{sub.name} 不是 {spec.id} 接受的格式（{'/'.join(spec.formats)}）")
         result = engine.score(engine.inspect(sub, spec), parse_filename(sub), spec)
         return apply_overrides(result, overrides)
 
-    def tool(name: str):
+    #--把函式登記成 MCP tool，加上前綴
+    def tool(name):
         full = f"{prefix}_{name}"
 
         def deco(fn):
@@ -111,7 +102,7 @@ def register(
         engine is installed. `issues` lists skill.toml problems to fix."""
         out = []
         for spec in specs.values():
-            ok, reason = engine_status(spec.engine)
+            ok, reason = engine_status(spec.engine, spec.engine_path)
             out.append({**spec.to_dict(), "engine_available": ok, "engine_error": reason})
         return {
             "domain": domain,
@@ -129,7 +120,7 @@ def register(
         engine's built-in table. If `diffs_from_scorer` is non-empty, tell the
         user the rubric changed (scores still follow the built-in table)."""
         spec = spec_of(skill)
-        return get_engine(spec.engine).rubric(spec, policy.read(rubric_path) if rubric_path else None)
+        return get_engine(spec.engine, spec.engine_path).rubric(spec, policy.read(rubric_path) if rubric_path else None)
 
     @tool("list_submissions")
     def list_submissions(
@@ -162,7 +153,7 @@ def register(
         table, charts, freeze panes, borders, sort/filter, formulas, raw-data
         check). Use it to double-check an item; grade_submission calls it."""
         spec = spec_of(skill)
-        return get_engine(spec.engine).inspect(policy.read(submission_path), spec)
+        return get_engine(spec.engine, spec.engine_path).inspect(policy.read(submission_path), spec)
 
     @tool("grade_submission")
     def grade_submission(
@@ -191,20 +182,22 @@ def register(
             description="Existing 評分結果.xlsx to append to. Default: the skill's blank template.")] = None,
         output_path: Annotated[str | None, Field(
             description="Where to save (must be in the output folder). "
-                        "Default: <output>/<課程代碼>_<實作項目>_評分結果_<YYMMDD>.xlsx")] = None,
+                        "Default: <output>/<課程代碼>_<Excel|Word|PPT>_評分結果<梯次yyyymm>_<yyyymmdd_HHMMSS>.xlsx")] = None,
+        batch: Annotated[str | None, Field(
+            description="梯次 yyyymm used in the default file name, e.g. 202609. Default: 截止日's year+month.")] = None,
         on_duplicate: Annotated[Literal["error", "replace", "append"], Field(
             description="What to do if a student (工號+姓名) is already in the result file.")] = "error",
         overwrite: Annotated[bool, Field(description="Allow replacing an existing output file.")] = False,
     ) -> dict:
-        """Grade each student and write 活頁1 評分結果明細 (one row per item) and
-        活頁2 評分結果表 (one row per student) into the 評分結果 workbook.
+        """Grade each student and write 活頁1 評分細項 (one row per item) and
+        活頁2 評分結果表 (one row per student, with 副檔名) into the 單科 評分結果 workbook.
         分數加總 and 是否合格 are formulas covering the whole 明細 sheet."""
         import openpyxl
 
-        from ..core.grading.results import Meta, default_output_name, meta_from_existing
-        from ..core.grading.results import write_results as _write
-
         spec = spec_of(skill)
+        res = get_engine(spec.engine, spec.engine_path).results
+        Meta, default_output_name, meta_from_existing = res.Meta, res.default_output_name, res.meta_from_existing
+        _write = res.write_results
         if result_path:
             base = policy.read(result_path)
         else:
@@ -238,11 +231,12 @@ def register(
                 )
             graded.append((result, s.summary or result.to_dict()["draft_summary"]))
 
-        out = policy.write(output_path or Path(output) / default_output_name(meta))
+        out = policy.write(output_path or Path(output) / default_output_name(meta, spec.formats[0], batch))
         if out.exists() and not overwrite:
             raise FileExistsError(f"{out} 已存在；若要覆寫請設定 overwrite=true，或指定其他 output_path。")
 
-        summary = _write(base, out, graded, meta, on_duplicate, pass_score=spec.pass_score)
+        summary = _write(base, out, graded, meta, on_duplicate, pass_score=spec.pass_score,
+                         ext=spec.formats[0])
         summary["meta_sources"] = sources
         summary["unresolved_needs_review"] = {
             f"{r.student.emp_id}-{r.student.name}": [i.code for i in r.items if i.needs_review]

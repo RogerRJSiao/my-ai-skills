@@ -1,7 +1,8 @@
-"""Grading data model shared by excel_grading / word_grading / powerpoint_grading.
+"""Grading data model shared by every grading skill (Excel, Word, PPT, ...).
 
-Nothing here knows about a specific exam: each domain package builds
-ItemScore lists from its own rubric and scoring rules.
+Nothing here knows about a specific exam: each skill's engine/ package
+(e.g. skills/04-excel-grading/engine) builds ItemScore lists from its own
+rubric and scoring rules.
 """
 from __future__ import annotations
 

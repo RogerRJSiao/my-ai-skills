@@ -1,7 +1,10 @@
-"""Write graded students into the 評分結果 workbook (活頁1 明細 + 活頁2 結果表).
+"""Write graded students into the 單科 評分結果 workbook (活頁1 評分細項 + 活頁2 評分結果表).
 
-Shared by every *_grading domain: the template path is passed in, and only
-the two sheets' fixed headers are assumed.
+Part of the xlsx_s06 engine: the MCP toolkit reaches it as ENGINE.results.
+The template path is passed in, and only the two sheets' fixed headers are
+assumed. Each skill writes its own
+workbook (one format per file); 活頁2 副檔名 tells the formats apart when the
+three subjects are merged later.
 
 Follows SKILL.md 第3/4步:
 - append after the existing rows, never overwrite other students;
@@ -19,13 +22,13 @@ from pathlib import Path
 
 import openpyxl
 
-from .models import PASS_SCORE, SUMMARY_LIMIT, GradeResult
+from kd_mcp.core.grading.models import PASS_SCORE, SUMMARY_LIMIT, GradeResult
 
-DETAIL_SHEET = "評分結果明細"
+DETAIL_SHEET = "評分細項"
 SUMMARY_SHEET = "評分結果表"
 DETAIL_HEADERS = ["截止日", "課程代碼", "實作項目", "部門代號", "工號", "姓名",
                   "大項", "小項代號", "得分", "完成比例", "執行者", "評閱結果說明"]
-SUMMARY_HEADERS = ["截止日", "課程代碼", "實作項目", "部門代號", "工號", "姓名",
+SUMMARY_HEADERS = ["截止日", "課程代碼", "實作項目", "部門代號", "工號", "姓名", "副檔名",
                    "檔案數", "分數加總", "是否合格", "執行者", "評閱結果簡述(150字以內)"]
 
 
@@ -69,7 +72,7 @@ def meta_from_existing(wb) -> Meta | None:
     ws = wb[SUMMARY_SHEET]
     if _last_row(ws) < 2:
         return None
-    v = [ws.cell(row=2, column=c).value for c in (1, 2, 3, 10)]
+    v = [ws.cell(row=2, column=c).value for c in (1, 2, 3, 11)]
     deadline = v[0].strftime("%Y-%m-%d") if isinstance(v[0], (dt.date, dt.datetime)) else v[0]
     return Meta(deadline, v[1], v[2], v[3])
 
@@ -97,9 +100,19 @@ def _copy_style(ws, src_row: int, dst_row: int, ncols: int):
             dst._style = src._style
 
 
-def default_output_name(meta: Meta, today: dt.date | None = None) -> str:
-    today = today or dt.date.today()
-    return f"{meta.course_code}_{meta.practice_item}_評分結果_{today:%y%m%d}.xlsx"
+SUBJECT_LABEL = {"xlsx": "Excel", "docx": "Word", "pptx": "PPT"}
+
+
+def default_output_name(meta: Meta, ext: str, batch: str | None = None,
+                        now: dt.datetime | None = None) -> str:
+    """<課程代碼>_<Excel|Word|PPT>_評分結果<yyyymm>_<yyyymmdd_HHMMSS>.xlsx.
+    yyyymm is the batch (梯次); without it, the 截止日's year and month."""
+    now = now or dt.datetime.now()
+    if not batch:
+        deadline = _deadline_value(meta.deadline)
+        batch = f"{deadline:%Y%m}" if isinstance(deadline, (dt.date, dt.datetime)) else f"{now:%Y%m}"
+    return (f"{meta.course_code}_{SUBJECT_LABEL.get(ext, ext)}_評分結果{batch}"
+            f"_{now:%Y%m%d_%H%M%S}.xlsx")
 
 
 def write_results(
@@ -109,8 +122,10 @@ def write_results(
     meta: Meta,
     on_duplicate: str = "error",
     pass_score: float = PASS_SCORE,
+    ext: str | None = None,
 ) -> dict:
-    """graded: [(GradeResult, 評閱結果簡述)]. on_duplicate: error | replace | append."""
+    """graded: [(GradeResult, 評閱結果簡述)]. on_duplicate: error | replace | append.
+    ext: the skill's format, written to 活頁2 副檔名 (e.g. "xlsx")."""
     if on_duplicate not in ("error", "replace", "append"):
         raise ValueError("on_duplicate must be error, replace or append")
 
@@ -154,7 +169,7 @@ def write_results(
                 ws_d.cell(row=r, column=1).number_format = "yyyy/mm/dd"
 
         r = _last_row(ws_s) + 1
-        values = head + [st.dept, st.emp_id, st.name, 1, None, None, meta.grader,
+        values = head + [st.dept, st.emp_id, st.name, ext, 1, None, None, meta.grader,
                          (summary or "")[:SUMMARY_LIMIT]]
         for c, v in enumerate(values, start=1):
             ws_s.cell(row=r, column=c, value=v)
@@ -167,10 +182,10 @@ def write_results(
     last_d = max(_last_row(ws_d), 2)
     rng = lambda col: f"{DETAIL_SHEET}!${col}$2:${col}${last_d}"  # noqa: E731
     for r in range(2, _last_row(ws_s) + 1):
-        ws_s.cell(row=r, column=8, value=(
+        ws_s.cell(row=r, column=9, value=(
             f"=SUMIFS({rng('I')},{rng('E')},E{r},{rng('F')},F{r})"
         ))
-        ws_s.cell(row=r, column=9, value=f'=IF(H{r}>={pass_score:g},"合格","不合格")')
+        ws_s.cell(row=r, column=10, value=f'=IF(I{r}>={pass_score:g},"合格","不合格")')
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)

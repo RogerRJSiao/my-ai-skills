@@ -6,6 +6,7 @@ Needs mcp-server/src on sys.path for kd_mcp's grading models (no MCP runtime).
 extract_submission: extract objective facts from a submission (also a CLI)
 extract_rubric    : built-in point table + reader for 評閱標準.xlsx
 score_submission  : references/scoring_checks.md rules -> GradeResult
+results           : writes the 單科 評分結果 workbook (評分細項 + 評分結果表)
 """
 from __future__ import annotations
 
@@ -15,6 +16,7 @@ from typing import TYPE_CHECKING
 from kd_mcp.core.grading.models import GradeResult, StudentInfo
 from .extract_submission import inspect_submission
 from .extract_rubric import compare_with_builtin, read_rubric_file
+from . import results
 from .score_submission import score_facts
 
 if TYPE_CHECKING:
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
 class XlsxS06Engine:
     name = "xlsx_s06"
     formats = ("xlsx",)
+    results = results    # Meta, default_output_name, meta_from_existing, write_results
 
     def inspect(self, path: Path, spec: "SkillSpec") -> dict:
         # the question file lets the engine detect altered raw data (3.x / 4.x)

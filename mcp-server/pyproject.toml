@@ -19,8 +19,8 @@ dev = ["pytest>=8"]
 
 # One entry point per server.
 [project.scripts]
-kd-training-internal = "kd_mcp.servers.training_internal.__main__:main"
-kd-training-external = "kd_mcp.servers.training_external.__main__:main"
+kd-grading-internal = "kd_mcp.servers.grading_internal.__main__:main"
+kd-grading-external = "kd_mcp.servers.grading_external.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

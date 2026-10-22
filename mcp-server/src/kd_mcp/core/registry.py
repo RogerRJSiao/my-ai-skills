@@ -3,7 +3,9 @@
 skill.toml layout:
 
     [skill]   id, title, domain, format, course_code?, practice_item?
-    [grading] engine, pass_score?
+    [grading] engine, engine_path, pass_score?
+              engine_path: the skill's own engine package (relative to the
+              skill folder) whose __init__ exposes ENGINE
     [assets]  name = "relative/path" ...   (relative to the skill folder)
 """
 from __future__ import annotations
@@ -24,6 +26,7 @@ class SkillSpec:
     formats: tuple[str, ...]     # "pbix|pbip" -> ("pbix", "pbip")
     root: Path
     engine: str
+    engine_path: Path | None = None   # the skill's engine package (always set for a parsed spec)
     pass_score: float = 60
     course_code: str | None = None
     practice_item: str | None = None
@@ -52,7 +55,7 @@ class RegistryIssue:
     message: str
 
 
-def _parse(manifest: Path, known_engines: set[str] | None) -> tuple[SkillSpec | None, list[str], str | None]:
+def _parse(manifest: Path) -> tuple[SkillSpec | None, list[str], str | None]:
     try:
         data = tomllib.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as e:
@@ -62,14 +65,23 @@ def _parse(manifest: Path, known_engines: set[str] | None) -> tuple[SkillSpec | 
     grading = data.get("grading", {})
     domain = skill.get("domain")
     problems = [f"[skill] 缺少 {k}" for k in REQUIRED_SKILL_KEYS if not skill.get(k)]
+    root = manifest.parent.resolve()
+    engine_path = None
+    if grading.get("engine_path"):
+        p = (root / grading["engine_path"]).resolve()
+        if not p.is_relative_to(root):
+            problems.append(f"engine_path 指到 skill 資料夾以外：{grading['engine_path']}")
+        elif not (p / "__init__.py").is_file():
+            problems.append(f"engine_path 不是 Python 套件（缺 __init__.py）：{grading['engine_path']}")
+        else:
+            engine_path = p
     if not grading.get("engine"):
         problems.append("[grading] 缺少 engine")
-    elif known_engines is not None and grading["engine"] not in known_engines:
-        problems.append(f"未知的 engine「{grading['engine']}」")
+    if not grading.get("engine_path"):
+        problems.append("[grading] 缺少 engine_path（skill 資料夾內的 engine 套件，例如 \"engine\"）")
     if skill.get("id") and skill["id"] != manifest.parent.name:
         problems.append(f"id「{skill['id']}」與資料夾名稱「{manifest.parent.name}」不同")
 
-    root = manifest.parent.resolve()
     assets = {}
     for key, rel in data.get("assets", {}).items():
         p = (root / rel).resolve()
@@ -89,6 +101,7 @@ def _parse(manifest: Path, known_engines: set[str] | None) -> tuple[SkillSpec | 
         formats=tuple(f.strip().lower() for f in str(skill["format"]).split("|") if f.strip()),
         root=root,
         engine=grading["engine"],
+        engine_path=engine_path,
         pass_score=float(grading.get("pass_score", 60)),
         course_code=skill.get("course_code"),
         practice_item=skill.get("practice_item"),
@@ -97,14 +110,14 @@ def _parse(manifest: Path, known_engines: set[str] | None) -> tuple[SkillSpec | 
     return spec, [], domain
 
 
-def scan(skills_dir: Path, known_engines: set[str] | None = None) -> tuple[list[SkillSpec], list[RegistryIssue]]:
+def scan(skills_dir: Path) -> tuple[list[SkillSpec], list[RegistryIssue]]:
     """Parse every skills/*/skill.toml. Folders without a manifest are plain
     skills (no MCP support) and are skipped silently."""
     specs, issues = [], []
     if not skills_dir.is_dir():
         return specs, [RegistryIssue(str(skills_dir), None, "skills 目錄不存在")]
     for manifest in sorted(skills_dir.glob(f"*/{MANIFEST}")):
-        spec, problems, domain = _parse(manifest, known_engines)
+        spec, problems, domain = _parse(manifest)
         if spec:
             specs.append(spec)
         issues += [RegistryIssue(manifest.parent.name, domain, m) for m in problems]

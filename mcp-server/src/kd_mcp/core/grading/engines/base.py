@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING, Protocol
 
 from ..models import GradeResult, StudentInfo
@@ -14,6 +15,8 @@ if TYPE_CHECKING:
 class Engine(Protocol):
     name: str
     formats: tuple[str, ...]          # file extensions it can read, e.g. ("xlsx",)
+    results: ModuleType               # 評分結果 writer: Meta, default_output_name,
+                                      # meta_from_existing, write_results
 
     def inspect(self, path: Path, spec: "SkillSpec") -> dict:
         """Objective facts about one submission. Never computes scores."""

@@ -1,4 +1,4 @@
-"""python -m kd_mcp.servers.training_external [--transport stdio|streamable-http] ..."""
+"""python -m kd_mcp.servers.grading_internal [--transport stdio|streamable-http] ..."""
 from __future__ import annotations
 
 from ...runtime.transport import serve

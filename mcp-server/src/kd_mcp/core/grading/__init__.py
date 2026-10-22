@@ -1,7 +1,7 @@
-"""Shared grading pieces: result model, filename parsing, overrides, and the
-評分結果 workbook writer (results.py). Exam-specific logic lives in
-engines/<name>/ (xlsx_s06, later docx_*/pptx_*/pbix_*), chosen per skill by
-the `[grading] engine` key in skill.toml."""
+"""Shared grading pieces: result model, filename parsing and overrides.
+Exam-specific logic, including the 評分結果 workbook writer, lives in
+each skill's engine/ package (e.g. skills/04-excel-grading/engine = xlsx_s06),
+loaded from `[grading] engine_path` in skill.toml (see engines/)."""
 
 from .models import (
     PASS_SCORE,
