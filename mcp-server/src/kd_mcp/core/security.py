@@ -3,8 +3,10 @@ PathPolicy before it is opened.
 
 Reads are allowed under data_root, the skills folder, the output folder (to
 append to an earlier result file) and any extra read roots. Writes are
-allowed only under the output folder. Relative paths resolve against
-data_root. Symlinks and ".." are resolved before the check.
+allowed under the output folder and under each batch's results folder,
+<data_root>/<梯次資料夾>/03_results/ (00_input, 01_template and 02_work stay
+read-only). Relative paths resolve against data_root. Symlinks and ".."
+are resolved before the check.
 """
 from __future__ import annotations
 
@@ -22,6 +24,7 @@ class PathPolicy:
     base: Path
     read_roots: tuple[Path, ...]
     write_roots: tuple[Path, ...]
+    batch_results: str | None = "03_results"   # <data_root>/<batch>/<this>/ is writable
 
     @classmethod
     def build(cls, *, data_root: Path, output: Path, skills_dir: Path,
@@ -52,7 +55,18 @@ class PathPolicy:
             raise FileNotFoundError(str(p))
         return p
 
+    def in_batch_results(self, p: Path) -> bool:
+        """True for a path inside <data_root>/<batch>/03_results/."""
+        if not self.batch_results or not p.is_relative_to(self.base):
+            return False
+        parts = p.relative_to(self.base).parts
+        return len(parts) >= 3 and parts[1] == self.batch_results
+
     def write(self, path: str | os.PathLike) -> Path:
         p = self._resolve(path)
-        self._check(p, self.write_roots, "write")
+        if not self.in_batch_results(p):
+            roots = self.write_roots
+            if self.batch_results:
+                roots += (self.base / "<梯次>" / self.batch_results,)
+            self._check(p, roots, "write")
         return p

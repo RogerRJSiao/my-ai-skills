@@ -64,7 +64,8 @@ S06_<yyyymm>/
 - `gi_get_rubric`：核對配分。
 - `gi_list_submissions`：解析檔名；`folder` 指向梯次的 `02_work/Excel`（例如 `S06_202609/02_work/Excel`）。
 - `gi_grade_submission`：依 `references/scoring_checks.md` 計分，並回傳 `needs_review` 項目。
-- `gi_write_results`：寫入單科評分結果活頁簿（存到 server 的 output 資料夾，需要時再移到梯次的 `03_results/`）。
+- `gi_write_results`：寫入單科評分結果活頁簿；帶 `batch`（例如 `202612`）時直接存到梯次的 `03_results/`，
+  找不到梯次資料夾才存到 server 的 output 資料夾。
 
 流程規則不變：
 - 第0步仍要先問齊四個欄位。課程代碼和實作項目雖然會預設帶入本資料夾 `skill.toml`

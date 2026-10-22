@@ -11,6 +11,7 @@ exposes them over MCP. Mount it with a prefix per server:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -55,8 +56,9 @@ Start with {prefix}_list_skills to see which skills this server grades, then
 課程代碼/實作項目, which default to the skill's skill.toml) unless appending
 to an existing result file; confirm any file whose filename_valid is false;
 resolve every needs_review item and pass the decision as overrides.
-Paths are relative to the server's data root; files are only written to its
-output folder.
+Paths are relative to the server's data root. {prefix}_write_results saves
+into the batch's 03_results/ when the batch folder exists (pass batch, e.g.
+202612), otherwise into the server's output folder; nothing else is written.
 """
 
 
@@ -181,10 +183,12 @@ def register(mcp, *, domain, prefix, data_root, output, skills_dir=None, extra_r
         result_path: Annotated[str | None, Field(
             description="Existing 評分結果.xlsx to append to. Default: the skill's blank template.")] = None,
         output_path: Annotated[str | None, Field(
-            description="Where to save (must be in the output folder). "
-                        "Default: <output>/<課程代碼>_<Excel|Word|PPT>_評分結果<梯次yyyymm>_<yyyymmdd_HHMMSS>.xlsx")] = None,
+            description="Where to save (in the output folder or a batch's 03_results/). "
+                        "Default: <課程代碼>_<梯次>/03_results/ when that batch folder exists, else <output>/; "
+                        "file name <課程代碼>_<Excel|Word|PPT>_評分結果<梯次yyyymm>_<yyyymmdd_HHMMSS>.xlsx")] = None,
         batch: Annotated[str | None, Field(
-            description="梯次 yyyymm used in the default file name, e.g. 202609. Default: 截止日's year+month.")] = None,
+            description="梯次 yyyymm, e.g. 202612: picks <課程代碼>_<梯次>/03_results/ and the file name. "
+                        "Default: 截止日's year+month.")] = None,
         on_duplicate: Annotated[Literal["error", "replace", "append"], Field(
             description="What to do if a student (工號+姓名) is already in the result file.")] = "error",
         overwrite: Annotated[bool, Field(description="Allow replacing an existing output file.")] = False,
@@ -231,7 +235,14 @@ def register(mcp, *, domain, prefix, data_root, output, skills_dir=None, extra_r
                 )
             graded.append((result, s.summary or result.to_dict()["draft_summary"]))
 
-        out = policy.write(output_path or Path(output) / default_output_name(meta, spec.formats[0], batch))
+        if output_path:
+            out = policy.write(output_path)
+        else:
+            name = default_output_name(meta, spec.formats[0], batch)
+            # the batch in the name (given, or from 截止日) picks <課程代碼>_<梯次>/03_results/
+            m = re.search(r"評分結果(\d{6})_", name)
+            results_dir = Path(data_root).resolve() / f"{meta.course_code}_{m.group(1)}" / "03_results" if m else None
+            out = policy.write((results_dir if results_dir and results_dir.is_dir() else Path(output)) / name)
         if out.exists() and not overwrite:
             raise FileExistsError(f"{out} 已存在；若要覆寫請設定 overwrite=true，或指定其他 output_path。")
 

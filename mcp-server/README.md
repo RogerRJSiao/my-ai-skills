@@ -54,7 +54,7 @@ kd-grading-internal --help                                    # 安裝後的 ent
 | `gi_list_submissions` | 列出資料夾內符合該 skill 格式的檔案，並解析「部門代號-工號-姓名」；`filename_valid=false` 需向使用者確認 | 否 |
 | `gi_inspect_submission` | 萃取客觀事實（04：樞紐表、圖表、凍結窗格、框線、排序/篩選…） | 否 |
 | `gi_grade_submission` | 計分：各小項得分＋評閱結果說明、`needs_review`、`warnings`、`draft_summary` | 否 |
-| `gi_write_results` | 批改並寫入『單科評分結果』活頁簿（由 skill 的 `engine/results.py` 寫入），可追加到既有結果檔；`meta_sources` 標示課程代碼／實作項目的來源 | 是 |
+| `gi_write_results` | 批改並寫入『單科評分結果』活頁簿（由 skill 的 `engine/results.py` 寫入）；帶 `batch` 且梯次資料夾存在時存到 `<課程代碼>_<梯次>/03_results/`，否則存到 output，可追加到既有結果檔；`meta_sources` 標示課程代碼／實作項目的來源 | 是 |
 
 建議流程：
 
@@ -85,13 +85,13 @@ kd-grading-internal --help                                    # 安裝後的 ent
 | 環境變數 | CLI 參數 | 說明 | 預設 |
 |---|---|---|---|
 | `KD_MCP_DATA_ROOT` | `--data-root` | 學生檔案的根目錄；tool 的相對路徑以它為基準 | 目前工作目錄 |
-| `KD_MCP_OUTPUT_DIR` | `--output-dir` | **唯一可寫入**的目錄 | `<data_root>/outputs` |
+| `KD_MCP_OUTPUT_DIR` | `--output-dir` | 可寫入的目錄（另外各梯次的 `03_results/` 也可寫入） | `<data_root>/outputs` |
 | `KD_MCP_SKILLS_DIR` | `--skills-dir` | skills 目錄（部署時指向複製過去的 skills） | repo 的 `skills/` |
 | `KD_MCP_ALLOWED_DIRS` | — | 額外的唯讀目錄（Windows 用 `;` 分隔） | 無 |
 | `KD_MCP_AUDIT_LOG` | — | 稽核 log 檔；設為空字串則關閉 | `<output_dir>/_audit/<server>.jsonl` |
 
 - **讀檔：** 只允許 data_root、skills、output 和額外唯讀目錄。
-- **寫檔：** 只允許 output。
+- **寫檔：** 只允許 output，以及 data_root 底下各梯次的 `03_results/`（`00_input`、`01_template`、`02_work` 不可寫）。
 - **路徑解析：** 檢查前會先解析 `..` 與 symlink。
 - **稽核 log：** 每次 tool 呼叫記一行 JSON（時間、server、tool、user、狀態、耗時）。只記檔名，不記內容、簡述或 overrides。
 - **HTTP 模式：** 只綁 127.0.0.1，並只接受白名單內的 Host 標頭。目前**沒有使用者驗證**，見 Roadmap。
