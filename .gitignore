@@ -3,6 +3,7 @@ outputs/
 **/outputs/
 
 # ── assets 內的 xlsx 範本【保留】，其餘 xlsx 排除 ──
+# （各 skill 若有子資料夾或工作區的規則，寫在該 skill 資料夾自己的 .gitignore）
 *.xlsx
 !skills/**/assets/*.xlsx
 
@@ -14,6 +15,10 @@ __pycache__/
 venv/
 dist/
 build/
+skills/08-auto-screenshot/auto_printscript/
+
+# ── 08-auto-screenshot 執行產出（截圖與合併 PDF）──
+skills/08-auto-screenshot/output/
 
 # ── 系統 / 編輯器 ──
 .DS_Store
@@ -25,6 +30,9 @@ Thumbs.db
 # ── 敏感資料 ──
 .env
 secrets.json
+
+# ── 機器本機路徑設定（因人而異，不納入版控）──
+skills/**/scripts/local_config.json
 
 # ── sample-data 內的 PDF（避免上傳銀行資料）──
 skills/**/sample-data/*.pdf
