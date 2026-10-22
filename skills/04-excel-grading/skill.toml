@@ -11,10 +11,14 @@ practice_item = "Excel實作"
 
 [grading]
 engine = "xlsx_s06"
+engine_path = "engine"       # 本 skill 的評分引擎（extract_submission / extract_rubric / score_submission）
 pass_score = 60
 
-[assets]                     # 相對於本資料夾
-rubric = "assets/S06_Excel實作檔_評閱標準_v0_1.xlsx"
-question = "assets/S06_excel_question.xlsx"
-answer = "assets/S06_excel_answer.xlsx"
-result_template = "assets/S06_Excel實作檔_評分結果_v0_1.xlsx"
+[assets]                     # 相對於本資料夾；子資料夾對應 training_internal/<課程>_<梯次>/ 的同名資料夾
+rubric = "assets/01_template/S06_excel_scoring_criteria_v1.xlsx"
+question = "assets/01_template/S06_excel_question_v1.xlsx"
+answer = "assets/01_template/S06_excel_answer_v1.xlsx"
+manifest_source_template = "assets/00_input/manifest_source/temp_S06_三科_原始檔案yyyymm_v1.csv"
+roster_template = "assets/00_input/roster/temp_S06_三科_學員名冊yyyymm_v1.xlsx"
+result_template = "assets/03_results/temp_S06_單科_評分結果yyyymm_v1.xlsx"
+all_report_template = "assets/03_results/temp_S06_三科_學員檔案與成績計算yyyymm_v1.xlsx"   # manifest + score 彙總

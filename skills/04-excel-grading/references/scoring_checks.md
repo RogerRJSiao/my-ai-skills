@@ -1,8 +1,8 @@
 # S06 Excel實作 — 逐項評分細則與檢查方法
 
-本文件補充 `assets/S06_Excel實作檔_評閱標準_v0_1.xlsx` 的文字敘述，記錄「怎麼從
+本文件補充 `assets/01_template/S06_excel_scoring_criteria_v1.xlsx` 的文字敘述，記錄「怎麼從
 .xlsx 檔案裡技術性地驗證每一小項」，以及批改過程中已經遇過的實際案例（正確
-做法 / 常見錯誤）。搭配 `scripts/inspect_submission.py` 的輸出一起讀。
+做法 / 常見錯誤）。搭配 `engine/extract_submission.py` 的輸出一起讀。
 
 18 個小項、大項與滿分（含額外加分）彙總表：
 
@@ -34,7 +34,7 @@
 
 ## 考題1. 薪資（樞紐分析）
 
-**判斷有無樞紐表（1.1 的前提）**：用 `inspect_submission.py` 的
+**判斷有無樞紐表（1.1 的前提）**：用 `engine/extract_submission.py` 的
 `pivot_薪資` 欄位判斷。它只抓「薪資」工作表 rels 裡真正掛的 pivotTable，
 **已經排除【考題】活頁上的範例樞紐表**（因為那個 pivotTable 是掛在
 sheet5／考題的 rels 上，不會出現在薪資 sheet 的 rels）。
@@ -98,7 +98,7 @@ Excel表格 → 給滿額外加分（6分）。
 
 **第一步：判斷原始資料是否被更動（極重要，會讓整大題歸零）**
 
-用 `--question` 參數提供原始題目檔（`assets/S06_excel_question.xlsx`），
+用 `--question` 參數提供原始題目檔（`assets/01_template/S06_excel_question_v1.xlsx`），
 腳本會輸出 `車輛銷售_raw_data_check` / `武將能力_raw_data_check`，比較
 A欄類別（廠牌／武將能力屬性）與第2列標頭（月份／武將姓名）是否與原始題目
 完全一致。**只要有任何一格不同（`unchanged: false`），該大題（3.1~3.4 或
@@ -161,5 +161,5 @@ A欄類別（廠牌／武將能力屬性）與第2列標頭（月份／武將姓
 | M2120-242000-建大員林 | 36/36 | 28/33（篩選未做） | 15/25（座標軸/圖例對調） | 15/15 | 94 |
 | M2120-242000-林建大 | 0/36（無樞紐表） | 22/33（無框線、篩選未做、G16有公式） | 0/25（原始資料被改） | 15/15 | 37（不合格）|
 
-這三個案例可以當作迴歸測試：改動 `inspect_submission.py` 後，重新對這三個
+這三個案例可以當作迴歸測試：改動 `engine/`（extract_submission／score_submission）後，重新對這三個
 檔案跑一次，結果應該與上表一致。
