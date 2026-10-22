@@ -19,17 +19,18 @@
 ## 🔌 MCP Server（`mcp-server/`）
 
 部分 Skill 的確定性步驟（讀檔、計分、寫結果檔）另外包成 MCP tools，放在獨立的
-Python 套件 [`mcp-server/`](./mcp-server/)，不會被打包進 skill zip。
+Python 套件 [`mcp-server/`](./mcp-server/)，不會被打包進 `.skill`。評分規則本身（engine）放在各 skill 的
+`engine/`，server 依 `skill.toml` 的 `engine_path` 載入。
 
-Skill 只要在資料夾放一份 `skill.toml`（宣告 domain、檔案格式、評分 engine），
+Skill 只要在資料夾放一份 `skill.toml`（宣告 domain、檔案格式、評分 engine 與 `engine_path`），
 對應 domain 的 server 就會自動提供它，不必改 server 程式。
 
 | Server | Domain | Tools | 目前的 skills |
 |---|---|---|---|
-| `kd-training-internal` | 內訓 | `ti_list_skills`、`ti_get_rubric`、`ti_list_submissions`、`ti_inspect_submission`、`ti_grade_submission`、`ti_write_results`、`ti_preview_manifest`、`ti_build_all_report` | 04-excel-grading |
-| `kd-training-external` | 外訓 | `te_*`（同上） | （05-word-grading、06-ppt-grading 規劃中，資料夾已建立尚無內容） |
+| `kd-grading-internal` | 內訓 | `gi_list_skills`、`gi_get_rubric`、`gi_list_submissions`、`gi_inspect_submission`、`gi_grade_submission`、`gi_write_results` | 04-excel-grading（05-word-grading、06-ppt-grading 規劃中，資料夾已建立尚無內容） |
+| `kd-grading-external` | 外訓 | `ge_*`（同上） | （07-powerbi-grading 規劃中） |
 
-在本 repo 用 Claude Code 開發時，根目錄的 `.mcp.json` 會自動載入 `kd-training-internal`。
+在本 repo 用 Claude Code 開發時，根目錄的 `.mcp.json` 會自動載入 `kd-grading-internal`。
 安裝與使用方式見 [`mcp-server/README.md`](./mcp-server/README.md)。
 
 ```
@@ -38,7 +39,7 @@ my-ai-skills/
 ├─ mcp-server/        ← 獨立的 Python 套件（kd_mcp）
 │  └─ src/kd_mcp/  ← core / runtime / toolkits / servers
 ├─ tools/build_skill.py ← 把一個 skill 打包成 .skill
-├─ .mcp.json          ← Claude Code 自動載入 kd-training-internal
+├─ .mcp.json          ← Claude Code 自動載入 kd-grading-internal
 └─ .gitlab-ci.yml     ← skills/ 有變更時，用 build_skill.py 打包各 skill
 ```
 
@@ -48,7 +49,7 @@ my-ai-skills/
 
 1. 進入任一 Skill 資料夾，閱讀該資料夾的 `README.md`
 2. 依需求選擇使用方式：
-   - **Claude.ai**：將資料夾打包成 `.skill` 上傳（Settings → Features → Skills）
+   - **Claude.ai**：用 `python tools/build_skill.py <編號>`（例如 `04`）打包成 `dist/<name>.skill` 後上傳（Settings → Features → Skills）
    - **Claude Code**：將資料夾複製到 `~/.claude/skills/` 或專案的 `.claude/skills/`
    - **其他 AI**：把 `SKILL.md` 全文貼給 AI，並附上指令「請依照此 Skill 執行」
 3. 若該 Skill 含 `requirements.txt`（01、04），先執行 `pip install -r requirements.txt`
@@ -62,8 +63,10 @@ my-ai-skills/
 |--------------|----------------------------------|------|
 | `SKILL.md` | **System Prompt（系統設定）**。定義 AI 的專家身份、觸發條件、核心工作流（Pipeline）與思考邏輯。 | 所有 Skill |
 | `references/*.md` | **Knowledge Base / Data Constraints（知識庫與資料約束）**。欄位規則、同義詞對照、檢查細則等，限制 AI 不可瞎編。 | `column_rules.md`、`merchant_normalize.md`、`changelog_template.md`、`scoring_checks.md` |
-| `assets/` | **Templates / Fixed Inputs（輸出範本與固定資產）**。輸出格式範本、評分標準、標準解答等。 | `template_spec.md`、`評閱標準.xlsx`、`評分結果.xlsx` |
-| `scripts/` | **Tools（可執行工具）**。讓 AI 呼叫的腳本，負責產出檔案或萃取客觀事實。 | `build_xlsx.py`、`init_batch.py` |
+| `assets/` | **Templates / Fixed Inputs（輸出範本與固定資產）**。輸出格式範本、評分標準、標準解答等。 | `template_spec.md`、04 的 `01_template/S06_excel_scoring_criteria_v1.xlsx`、`03_results/temp_S06_單科_評分結果yyyymm_v1.xlsx` |
+| `scripts/` | **Tools（可執行工具）**。讓 AI 呼叫的腳本，負責產出檔案或整理資料夾。 | `build_xlsx.py`、`init_batch.py` |
+| `engine/` | **評分引擎**。萃取客觀事實、計分、寫單科評分結果；skill 與 MCP server 共用。 | 04 的 `extract_submission.py`、`score_submission.py` |
+| `skill.toml` | **中繼資料**。domain、課程代碼、engine、assets 路徑；MCP server 與 04 的 scripts 會讀取。 | 04 |
 | `examples/` | **Few-Shot（範例）**。真實案例，作為 AI 歸納寫法與規則的依據。 | 03 的歷年改善提案 |
 | `docs/` | **給人讀的操作手冊**，不直接餵給 AI。 | 03 的 `改善提案撰寫操作建議.md` |
 
@@ -74,7 +77,7 @@ my-ai-skills/
 - 每個 Skill 必須包含：`README.md`、`SKILL.md`
 - 選配：`references/`、`scripts/`、`assets/`、`sample-data/`、`examples/`、`docs/`
 - 輸出的 `.xlsx` 不納入版控（`outputs/` 已加入 `.gitignore`）
-- `assets/*.xlsx` 為輸出範本，**納入版控**（`.gitignore` 已豁免）
+- `assets/*.xlsx` 為輸出範本，**納入版控**（`.gitignore` 已豁免）；assets 子資料夾的規則寫在該 skill 自己的 `.gitignore`（例如 04）
 - `sample-data/*.pdf` 不納入版控（避免上傳銀行原始資料）
 - 有 Python 腳本的 Skill，依賴統一寫在該 Skill 的 `requirements.txt`
 - 資料夾命名：`{兩位數編號}-{skill-name}`，`SKILL.md` 一律放在 Skill 資料夾根目錄
@@ -84,10 +87,12 @@ my-ai-skills/
 ## 🗂️ 版控規則說明
 
 ```
-納入版控   ✅  skills/**/assets/*.xlsx        （輸出範本、評分標準等固定資產）
+納入版控   ✅  skills/**/assets/*.xlsx        （輸出範本、評分標準等固定資產；子資料夾見各 skill 的 .gitignore）
 納入版控   ✅  所有 .md、.py、.txt、.png
 納入版控   ✅  skills/**/sample-data/bank_*.pdf   （公開優惠頁，無個資）
 納入版控   ✅  skills/**/references/*.pdf         （AI 對話紀錄等參考文件）
 排除版控   ❌  outputs/*.xlsx                （本地產出）
 排除版控   ❌  sample-data/*.pdf             （原始資料，bank_ 開頭除外）
+排除版控   ❌  skills/**/scripts/local_config.json （本機資料根目錄設定）
+排除版控   ❌  skills/04-excel-grading/assets/02_work/**（學員作業副本，只留 .gitkeep）
 ```

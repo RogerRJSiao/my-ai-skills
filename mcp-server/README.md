@@ -8,15 +8,15 @@
 
 | Server | Domain | Tool 前綴 | 預設 port | 部署主機 | 目前的 skills |
 |---|---|---|---|---|---|
-| `kd-training-internal` | `training_internal`（內訓） | `ti_` | 8101 | 主機 A | 04-excel-grading |
-| `kd-training-external` | `training_external`（外訓） | `te_` | 8102 | 主機 B | （07-powerbi-grading 規劃中） |
+| `kd-grading-internal` | `training_internal`（內訓） | `gi_` | 8101 | 主機 A | 04-excel-grading（05-word-grading、06-ppt-grading 規劃中） |
+| `kd-grading-external` | `training_external`（外訓） | `ge_` | 8102 | 主機 B | （07-powerbi-grading 規劃中） |
 
 ## 安裝
 
 ```bash
 cd mcp-server
 python -m venv .venv
-.venv/Scripts/python -m pip install -e ".[office,dev]"   # macOS/Linux：.venv/bin/python
+.venv/Scripts/python -m pip install -e ".[office]"   # macOS/Linux：.venv/bin/python
 ```
 
 需求：Python ≥ 3.11、`mcp` 2.x。
@@ -26,45 +26,46 @@ Extras 對應評分 engine 需要的套件：
 | Extra | 內容 |
 |---|---|
 | `office` | `openpyxl`（`xlsx_s06` engine 需要） |
-| `dev` | `pytest` |
 
 如果沒裝某個 engine 需要的 extra，server 仍會啟動，但 `*_list_skills` 會把該 skill 標成 `engine_available: false`。
 
 ## 啟動
 
 ```bash
-python -m kd_mcp.servers.training_internal                     # stdio（給 Claude Code / Desktop）
-python -m kd_mcp.servers.training_internal --transport streamable-http --port 8101
+python -m kd_mcp.servers.grading_internal                     # stdio（給 Claude Code / Desktop）
+python -m kd_mcp.servers.grading_internal --transport streamable-http --port 8101
 #   → http://127.0.0.1:8101/mcp；放在 IIS 後面時加 --allowed-host <網站主機名稱>
-kd-training-internal --help                                    # 安裝後的 entry point，參數相同
+kd-grading-internal --help                                    # 安裝後的 entry point，參數相同
 ```
 
-在本 repo 開發時，根目錄的 `.mcp.json` 會讓 Claude Code 自動載入 `kd-training-internal`。
+在本 repo 開發時，根目錄的 `.mcp.json` 會讓 Claude Code 自動載入 `kd-grading-internal`。
 它指向 `mcp-server/.venv/Scripts/python.exe`，這是 Windows 路徑；macOS/Linux 請改成 `.venv/bin/python`。
 
-正式部署（NSSM 服務＋IIS 反向代理）請看 [`deploy/README.md`](deploy/README.md)。
 
-## Tools（training toolkit，以 `ti_` 為例）
+## Tools（grading toolkit，以 `gi_` 為例）
 
 所有 server 共用同一組 tools，只有前綴不同。每個 tool 都要帶 `skill` 參數。
 傳入不屬於該 server domain 的 skill 會被拒絕。
 
 | Tool | 用途 | 會寫檔？ |
 |---|---|---|
-| `ti_list_skills` | 列出本 server 可評分的 skill、接受的格式、預設課程代碼／實作項目、engine 是否可用；`issues` 列出 skill.toml 的問題 | 否 |
-| `ti_get_rubric` | 讀評閱標準；`diffs_from_scorer` 非空代表配分已異動 | 否 |
-| `ti_list_submissions` | 列出資料夾內符合該 skill 格式的檔案，並解析「部門代號-工號-姓名」；`filename_valid=false` 需向使用者確認 | 否 |
-| `ti_inspect_submission` | 萃取客觀事實（04：樞紐表、圖表、凍結窗格、框線、排序/篩選…） | 否 |
-| `ti_grade_submission` | 計分：各小項得分＋評閱結果說明、`needs_review`、`warnings`、`draft_summary` | 否 |
-| `ti_write_results` | 批改並寫入『評分結果』活頁簿，可追加到既有結果檔；`meta_sources` 標示課程代碼／實作項目的來源 | 是 |
+| `gi_list_skills` | 列出本 server 可評分的 skill、接受的格式、預設課程代碼／實作項目、engine 是否可用；`issues` 列出 skill.toml 的問題 | 否 |
+| `gi_get_rubric` | 讀評閱標準；`diffs_from_scorer` 非空代表配分已異動 | 否 |
+| `gi_list_submissions` | 列出資料夾內符合該 skill 格式的檔案，並解析「部門代號-工號-姓名」；`filename_valid=false` 需向使用者確認 | 否 |
+| `gi_inspect_submission` | 萃取客觀事實（04：樞紐表、圖表、凍結窗格、框線、排序/篩選…） | 否 |
+| `gi_grade_submission` | 計分：各小項得分＋評閱結果說明、`needs_review`、`warnings`、`draft_summary` | 否 |
+| `gi_write_results` | 批改並寫入『單科評分結果』活頁簿（由 skill 的 `engine/results.py` 寫入），可追加到既有結果檔；`meta_sources` 標示課程代碼／實作項目的來源 | 是 |
 
 建議流程：
 
-1. `ti_list_skills`、`ti_list_submissions`。
-2. 每個檔案呼叫 `ti_grade_submission`。
+1. `gi_list_skills`、`gi_list_submissions`（04 請指向梯次的 `02_work/Excel/`，例如 `S06_202609/02_work/Excel`）。
+2. 每個檔案呼叫 `gi_grade_submission`。
 3. 處理 `needs_review`：人工確認後用 `overrides` 帶入。
 4. 撰寫 150 字簡述。
-5. `ti_write_results`。
+5. `gi_write_results`。
+
+建立梯次、複製到 02_work、三科彙總沒有對應的 tool，請在終端機執行 skill 的
+`scripts/`（`init_batch.py`、`check_batch.py`、`copy_to_work.py`、`build_all_report.py`）。
 
 ### 04-excel-grading（engine `xlsx_s06`）計分重點
 
@@ -108,20 +109,18 @@ mcp-server/
 │  │  ├─ registry.py               #   掃描 skills/*/skill.toml，依 domain 篩選
 │  │  └─ grading/
 │  │     ├─ models.py              #   ItemScore/GradeResult、檔名解析、overrides、簡述草稿
-│  │     ├─ results.py             #   寫『評分結果』活頁簿
-│  │     └─ engines/               #   依 skill.toml 的 engine 名稱載入
-│  │        ├─ base.py             #   Engine 介面：inspect / score / rubric
-│  │        └─ xlsx_s06/           #   04-excel-grading（inspection、rubric、scoring）
+│  │     └─ engines/               #   依 skill.toml 的 engine_path 載入 skill 的 engine/
+│  │        ├─ base.py             #   Engine 介面：inspect / score / rubric / results
+│  │        └─ __init__.py         #   依 engine_path 從 skill 資料夾載入
+│  │                               #   （04-excel-grading 的 xlsx_s06 放在 skills/04-excel-grading/engine/）
 │  ├─ runtime/                     # ② 啟動與傳輸
 │  │  ├─ transport.py              #   CLI、stdio / streamable-http、Host 白名單
 │  │  └─ tooling.py                #   tool 包裝：稽核 log＋可預期錯誤轉 ToolError
 │  ├─ toolkits/                    # ③ 可重用的 tool 組
-│  │  └─ training.py               #   register(mcp, *, domain, prefix, data_root, output, ...)
+│  │  └─ grading.py                #   register(mcp, *, domain, prefix, data_root, output, ...)
 │  └─ servers/                     # ④ 實際啟動的 server
-│     ├─ training_internal/        #   kd-training-internal → 主機 A
-│     └─ training_external/        #   kd-training-external → 主機 B
-├─ deploy/                         # 主機設定、NSSM 安裝腳本、IIS 範本
-└─ tests/                          # 結構對應 src
+│     ├─ grading_internal/         #   kd-grading-internal（內訓）→ 主機 A
+│     └─ grading_external/         #   kd-grading-external（外訓）→ 主機 B
 ```
 
 相依方向：`servers → toolkits → core`、`runtime → core`。`core/` 不 import `mcp`。
@@ -140,7 +139,8 @@ course_code = "S06"            # 寫結果檔的預設值（選填）
 practice_item = "Excel實作"     # 同上（選填）
 
 [grading]
-engine = "xlsx_s06"            # core/grading/engines/ 下的 engine
+engine = "xlsx_s06"            # engine 名稱
+engine_path = "engine"         # 必填：skill 資料夾內的 engine 套件
 pass_score = 60
 
 [assets]                       # 相對於 skill 資料夾，engine 依名稱取用
@@ -151,21 +151,20 @@ result_template = "assets/..."
 
 ### 新增一個評分 skill（例如 05-word-grading）
 
-1. 在 `skills/05-word-grading/` 寫好 `SKILL.md` 和 assets，再加一份 `skill.toml`（`domain`、`format = "docx"`、`engine`）。
-2. 如果現有 engine 不適用，就新增 `core/grading/engines/<engine>/`：
-   - 實作 `base.Engine`，在 `__init__.py` 提供 `ENGINE`。
-   - 登記到 `engines/__init__.py` 的 `ENGINE_MODULES`。
+1. 在 `skills/05-word-grading/` 寫好 `SKILL.md` 和 assets，再加一份 `skill.toml`（`domain`、`format = "docx"`、`engine`、`engine_path`）。
+2. 在 skill 資料夾新增 `engine/` 套件，並在 `skill.toml` 設 `engine_path = "engine"`：
+   - 實作 `base.Engine`，在 `__init__.py` 提供 `ENGINE`；共用的資料結構從 `kd_mcp.core.grading.models` import。
+   - `ENGINE.results` 是寫單科評分結果活頁簿的模組（`Meta`、`default_output_name`、`meta_from_existing`、`write_results`）；
+     格式和 04 相同時，可以複製 `skills/04-excel-grading/engine/results.py`。
    - 需要的第三方套件加進 `pyproject.toml` 的 extras。
-3. 檔名解析、overrides、簡述草稿、寫評分結果活頁簿，直接沿用 `core/grading/`。
-4. 加測試 `tests/core/grading/engines/<engine>/`。
-5. 部署：把 skill 加進對應主機 `deploy/hosts/*.toml` 的 `skills`（必要時也加 `extras`）。
+3. 檔名解析、overrides、簡述草稿，直接沿用 `core/grading/`。
 
 只要 domain 已經有對應的 server，就**不用改任何 server 或 toolkit 程式**。
 
 ### 新增一個 server（新 domain）
 
-複製 `servers/training_internal/`，改 `NAME`、`DOMAIN`、`PREFIX`、`DEFAULT_PORT`，
-並在 `pyproject.toml` 加 entry point、在 `deploy/hosts/` 加主機設定。
+複製 `servers/grading_internal/`，改 `NAME`、`DOMAIN`、`PREFIX`、`DEFAULT_PORT`，
+並在 `pyproject.toml` 加 entry point。
 
 ## Roadmap（尚未實作）
 
@@ -175,4 +174,4 @@ result_template = "assets/..."
 | `core/masking.py` | log 與回傳內容的姓名／工號遮罩 | 外訓 server 上線前 |
 | `core/jobs.py` + `toolkits/jobs.py` | 批次評分佇列：job_submit / job_status | 一次評分量超過 MCP 逾時時 |
 | `core/skill_runner.py` | 以子行程執行 skill 自帶的 scripts | 出現只有 script、沒有 engine 的 skill 時 |
-| engines `docx_*` / `pptx_*` / `pbix_*`，extras `powerbi` / `http` | 05–07 評分 | 05–07 開發時 |
+| 05–07 各自的 `engine/`（docx／pptx／pbix），extras `powerbi` / `http` | 05–07 評分 | 05–07 開發時 |

@@ -15,7 +15,6 @@ dependencies = [
 [project.optional-dependencies]
 # Grading engines for Office formats (xlsx_s06; later docx/pptx engines).
 office = ["openpyxl>=3.1"]
-dev = ["pytest>=8"]
 
 # One entry point per server.
 [project.scripts]
@@ -25,7 +24,3 @@ kd-grading-external = "kd_mcp.servers.grading_external.__main__:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["tests"]
-addopts = "--import-mode=importlib"

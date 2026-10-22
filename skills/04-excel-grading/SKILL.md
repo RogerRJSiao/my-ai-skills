@@ -1,12 +1,12 @@
 ---
 name: s06-excel-grading
-description: Standard operating procedure for grading "S06" Excel實作 (pivot table + charts) student submissions against the bundled scoring criteria (S06_excel_scoring_criteria_v*.xlsx), question and answer files, and writing results into the 單科評分結果 workbook (活頁1 評分細項 + 活頁2 評分結果表). Also covers the batch-folder tools: setting up a 梯次 folder (init_batch.py) and checking it before grading (check_batch.py). Use this whenever the user uploads one or more student .xlsx submissions named 「部門代號-工號-姓名.xlsx」 and asks to grade/評分/批改 an "S06" or "Excel實作" assignment, wants scores added to an existing 評分結果 file, asks to 建立梯次/檢查梯次, or references 評閱標準 / S06_excel_scoring_criteria / S06_excel_answer / S06_excel_question. Trigger this even if the user just says "幫我評分這個檔案" in a conversation that has already established the S06 Excel grading context.
+description: Standard operating procedure for grading "S06" Excel實作 (pivot table + charts) student submissions against the bundled scoring criteria (S06_excel_scoring_criteria_v*.xlsx), question and answer files, and writing results into the 單科評分結果 workbook (活頁1 評分細項 + 活頁2 評分結果表). Also covers the batch-folder tools: setting up a 梯次 folder (init_batch.py), checking it before grading (check_batch.py), copying compliant submissions into 02_work (copy_to_work.py) and building the 三科 學員檔案與成績計算 workbook (build_all_report.py). Use this whenever the user uploads one or more student .xlsx submissions named 「部門代號-工號-姓名.xlsx」 and asks to grade/評分/批改 an "S06" or "Excel實作" assignment, wants scores added to an existing 評分結果 file, asks to 建立梯次/檢查梯次/複製到 02_work/三科彙總, or references 評閱標準 / S06_excel_scoring_criteria / S06_excel_answer / S06_excel_question. Trigger this even if the user just says "幫我評分這個檔案" in a conversation that has already established the S06 Excel grading context.
 ---
 
 # S06 Excel實作 評分 SOP
 
 批改「薪資樞紐分析 / 成績表 / 車輛銷售直條圖 / 武將能力雷達圖」四大題、共18個
-小項的 Excel 實作考題，並把結果寫進標準格式的『評分結果』活頁簿。
+小項的 Excel 實作考題，並把結果寫進標準格式的『單科評分結果』活頁簿。
 
 ## 這個 skill 涵蓋的固定資產（assets/）
 
@@ -55,6 +55,25 @@ S06_<yyyymm>/
 
 梯次的 01_template 有多個版本（_v1、_v2）時，一律取版本號最大的。
 
+## 若環境有 kd-grading-internal 的 `gi_*` tools
+
+在 my-ai-skills repo 用 Claude Code 時，`.mcp.json` 會載入 kd-grading-internal
+（內訓評分 server）。此時第1~3步可以改用下列 tools，呼叫時一律帶
+`skill="04-excel-grading"`：
+
+- `gi_get_rubric`：核對配分。
+- `gi_list_submissions`：解析檔名；`folder` 指向梯次的 `02_work/Excel`（例如 `S06_202609/02_work/Excel`）。
+- `gi_grade_submission`：依 `references/scoring_checks.md` 計分，並回傳 `needs_review` 項目。
+- `gi_write_results`：寫入單科評分結果活頁簿（存到 server 的 output 資料夾，需要時再移到梯次的 `03_results/`）。
+
+流程規則不變：
+- 第0步仍要先問齊四個欄位。課程代碼和實作項目雖然會預設帶入本資料夾 `skill.toml`
+  的值，仍要向使用者確認。
+- `needs_review` 的項目要人工確認後，用 `overrides` 帶入。
+- 評閱結果簡述仍由你依得分分布撰寫，再傳入 `summary`。
+
+沒有這些 tools 時，照下面的流程手動執行。
+
 ## 流程
 
 ### 第0步：確認缺漏的「無法從檔名取得」的資訊
@@ -79,8 +98,8 @@ S06_<yyyymm>/
 
 ### 第1步：讀取評閱標準
 
-用 `openpyxl`/`markitdown` 讀 `assets/01_template/S06_excel_scoring_criteria_v1.xlsx`
-（或使用者本次提供的版本），取出大項、小項代號（如 "1.1"）、配分、額外加分
+用 `openpyxl`/`markitdown` 讀梯次的 `01_template/S06_excel_scoring_criteria_v<最大版本>.xlsx`
+（沒有梯次資料夾時讀本 skill 的 `assets/01_template/`；或使用者本次提供的版本），取出大項、小項代號（如 "1.1"）、配分、額外加分
 配分。18 個小項與滿分彙總已經整理在 `references/scoring_checks.md` 最上方
 的表格，可以直接核對、不用每次重新解析。
 
@@ -129,7 +148,8 @@ append 完後，記得把活頁2所有列（含原本就有的）的 SUMIFS 公�
   `total_errors: 0`。
 - 用 openpyxl 以 `data_only=True` 讀回結果，跟自己算的分數/合格判定核對一次
   再交付，避免公式範圍寫錯導致加總對不上。
-- 存到 `/mnt/user-data/outputs/`，用 `present_files` 交付，並在對話中用
+- 有梯次資料夾時存到梯次的 `03_results/`（`build_all_report.py` 從這裡讀）；在 claude.ai
+  上則存到 `/mnt/user-data/outputs/`，用 `present_files` 交付。並在對話中用
   條列式簡短說明每位學生的總分、合格與否、以及扣分主因（不用整份 12欄 x
   18列的明細貼在對話裡，那些都在檔案裡了）。
 
