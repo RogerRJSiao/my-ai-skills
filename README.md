@@ -16,6 +16,34 @@
 
 ---
 
+## 🔌 MCP Server（`mcp-server/`）
+
+部分 Skill 的確定性步驟（讀檔、計分、寫結果檔）另外包成 MCP tools，放在獨立的
+Python 套件 [`mcp-server/`](./mcp-server/)，不會被打包進 skill zip。
+
+Skill 只要在資料夾放一份 `skill.toml`（宣告 domain、檔案格式、評分 engine），
+對應 domain 的 server 就會自動提供它，不必改 server 程式。
+
+| Server | Domain | Tools | 目前的 skills |
+|---|---|---|---|
+| `kd-training-internal` | 內訓 | `ti_list_skills`、`ti_get_rubric`、`ti_list_submissions`、`ti_inspect_submission`、`ti_grade_submission`、`ti_write_results`、`ti_preview_manifest`、`ti_build_all_report` | 04-excel-grading |
+| `kd-training-external` | 外訓 | `te_*`（同上） | （05-word-grading、06-ppt-grading 規劃中，資料夾已建立尚無內容） |
+
+在本 repo 用 Claude Code 開發時，根目錄的 `.mcp.json` 會自動載入 `kd-training-internal`。
+安裝與使用方式見 [`mcp-server/README.md`](./mcp-server/README.md)。
+
+```
+my-ai-skills/
+├─ skills/            ← 只放 skill（評分類各有 skill.toml）
+├─ mcp-server/        ← 獨立的 Python 套件（kd_mcp）
+│  └─ src/kd_mcp/  ← core / runtime / toolkits / servers
+├─ tools/build_skill.py ← 把一個 skill 打包成 .skill
+├─ .mcp.json          ← Claude Code 自動載入 kd-training-internal
+└─ .gitlab-ci.yml     ← skills/ 有變更時，用 build_skill.py 打包各 skill
+```
+
+---
+
 ## 🚀 快速開始
 
 1. 進入任一 Skill 資料夾，閱讀該資料夾的 `README.md`
@@ -35,7 +63,7 @@
 | `SKILL.md` | **System Prompt（系統設定）**。定義 AI 的專家身份、觸發條件、核心工作流（Pipeline）與思考邏輯。 | 所有 Skill |
 | `references/*.md` | **Knowledge Base / Data Constraints（知識庫與資料約束）**。欄位規則、同義詞對照、檢查細則等，限制 AI 不可瞎編。 | `column_rules.md`、`merchant_normalize.md`、`changelog_template.md`、`scoring_checks.md` |
 | `assets/` | **Templates / Fixed Inputs（輸出範本與固定資產）**。輸出格式範本、評分標準、標準解答等。 | `template_spec.md`、`評閱標準.xlsx`、`評分結果.xlsx` |
-| `scripts/` | **Tools（可執行工具）**。讓 AI 呼叫的腳本，負責產出檔案或萃取客觀事實。 | `build_xlsx.py`、`inspect_submission.py` |
+| `scripts/` | **Tools（可執行工具）**。讓 AI 呼叫的腳本，負責產出檔案或萃取客觀事實。 | `build_xlsx.py`、`init_batch.py` |
 | `examples/` | **Few-Shot（範例）**。真實案例，作為 AI 歸納寫法與規則的依據。 | 03 的歷年改善提案 |
 | `docs/` | **給人讀的操作手冊**，不直接餵給 AI。 | 03 的 `改善提案撰寫操作建議.md` |
 
