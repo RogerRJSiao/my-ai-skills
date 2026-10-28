@@ -10,7 +10,10 @@ prints the facts as JSON. Keys beyond the original script's:
 
     chart_*:  chart_count, bar_dir, is_3d, radar_style, has_data_table
     成績:     sort_conditions, filter_conditions, a1_merged_range, row_avg_uses_subtotal
-    top level: sheet_names, ambiguous_sheets (sheet names may carry a prefix/suffix)
+    pivot_薪資: host_sheet, location (the pivot may sit on a sheet other than 薪資)
+    成績 (2.2): a1_horizontal, a1_merge_and_center
+    top level: sheet_names, ambiguous_sheets (sheet names may carry a prefix/suffix),
+               chartex_count (Excel 2016+ charts such as 直方圖, not inspected)
 
 This module does NOT compute scores; see score_submission.py.
 """
@@ -24,6 +27,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import openpyxl
+from openpyxl.utils import range_boundaries
 
 NS = {
     "c": "http://schemas.openxmlformats.org/drawingml/2006/chart",
@@ -142,18 +146,52 @@ def resolve_sheet_names(names) -> tuple[dict[str, str], dict[str, list[str]]]:
 
 # ── 考題1 薪資：pivot table ────────────────────────────────────────────────
 
-def pivot_info(zf: zipfile.ZipFile, sheet_part: str) -> dict | None:
-    """Facts for the pivotTable attached to this sheet's rels, or None.
-    Pivot tables on other sheets (e.g. the sample on 【考題】) are ignored."""
-    pivot_target = next(
-        (r["Target"] for r in _read_rels(zf, sheet_part) if r["Type"].endswith("/pivotTable")),
-        None,
-    )
-    if pivot_target is None:
-        return None
+def _pivot_targets(zf: zipfile.ZipFile, sheet_part: str) -> list[str]:
+    return [r["Target"] for r in _read_rels(zf, sheet_part) if r["Type"].endswith("/pivotTable")]
 
+
+def _table_sheets(zf: zipfile.ZipFile, parts: dict[str, str]) -> dict[str, str]:
+    """Map Excel table name (and displayName) -> the sheet it is defined on."""
+    out = {}
+    for sheet, part in parts.items():
+        for r in _read_rels(zf, part):
+            if r["Type"].endswith("/table"):
+                root = ET.fromstring(zf.read(r["Target"]))
+                for key in ("name", "displayName"):
+                    if root.attrib.get(key):
+                        out[root.attrib[key]] = sheet
+    return out
+
+
+def find_salary_pivot(zf: zipfile.ZipFile, parts: dict[str, str], salary_sheet: str | None) -> dict | None:
+    """Facts for the student's 薪資 pivot table, or None.
+
+    The pivot may sit on 【薪資】 or on another sheet (Excel puts a new pivot
+    on a new sheet by default), but its source must be the 【薪資】 data. The
+    sample on 【考題】 is skipped: it is hosted there and its cache reads an
+    external workbook, so it never counts (rubric 1.1)."""
+    if salary_sheet is None:
+        return None
+    tables = _table_sheets(zf, parts)
+    hosts = [salary_sheet] + [s for s in parts if s != salary_sheet and "考題" not in s]
+    for host in hosts:
+        for target in _pivot_targets(zf, parts[host]):
+            info = pivot_info(zf, target)
+            if info.pop("_external"):
+                continue
+            source = info.pop("_source_sheet") or tables.get(info["source_name_or_range"])
+            # an unresolvable source is accepted only for a pivot on 【薪資】 itself
+            if (source or (salary_sheet if host == salary_sheet else None)) != salary_sheet:
+                continue
+            return {**info, "host_sheet": host}
+    return None
+
+
+def pivot_info(zf: zipfile.ZipFile, pivot_target: str) -> dict:
+    """Facts for one pivotTable part."""
     pt_root = ET.fromstring(zf.read(pivot_target))
     cache_id = pt_root.attrib.get("cacheId")
+    location = pt_root.find(f"{M}location")
 
     wb_root = ET.fromstring(zf.read("xl/workbook.xml"))
     rid_to_target = _workbook_rid_targets(zf)
@@ -163,13 +201,16 @@ def pivot_info(zf: zipfile.ZipFile, sheet_part: str) -> dict | None:
             cache_target = rid_to_target.get(pc.attrib.get(f"{R}id"))
             break
 
-    cache_source_name = None
+    cache_source_name = source_sheet = None
+    external = False
     field_shared_items: dict[int, list] = {}
     if cache_target:
         cache_root = ET.fromstring(zf.read(cache_target))
         src = cache_root.find(f"{M}cacheSource/{M}worksheetSource")
         if src is not None:
             cache_source_name = src.attrib.get("name") or src.attrib.get("ref")
+            source_sheet = src.attrib.get("sheet")
+            external = src.attrib.get(f"{R}id") is not None  # source in another workbook
         for i, cf in enumerate(cache_root.findall(f"{M}cacheFields/{M}cacheField")):
             items = [s.attrib.get("v") for s in cf.findall(f"{M}sharedItems/{M}s")]
             if items:
@@ -217,15 +258,20 @@ def pivot_info(zf: zipfile.ZipFile, sheet_part: str) -> dict | None:
         "row_visible_labels": visible_labels(row_field_idx[0]) if row_field_idx else None,
         "col_visible_labels": visible_labels(col_field_idx[0]) if col_field_idx else None,
         "data_fields": data_fields,
+        "location": location.attrib.get("ref") if location is not None else None,
+        "_source_sheet": source_sheet,
+        "_external": external,
     }
 
 
-def pivot_output_number_format(wb, sheet_name: str) -> list[str]:
+def pivot_output_number_format(wb, sheet_name: str, location: str | None = None) -> list[str]:
     """Displayed number_format of numeric cells in the pivot output area
-    (applyNumberFormats may be 0, so the cell's own style is what shows)."""
+    (applyNumberFormats may be 0, so the cell's own style is what shows).
+    `location` is the pivot's own range (e.g. "A3:C7"); without it J1:T10 is scanned."""
     ws = wb[sheet_name]
+    min_col, min_row, max_col, max_row = range_boundaries(location) if location else (10, 1, 20, 10)
     formats = set()
-    for row in ws.iter_rows(min_row=1, max_row=10, min_col=10, max_col=20):
+    for row in ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col):
         for c in row:
             if isinstance(c.value, (int, float)) and not isinstance(c.value, bool):
                 formats.add(c.number_format)
@@ -234,12 +280,18 @@ def pivot_output_number_format(wb, sheet_name: str) -> list[str]:
 
 # ── 考題3/4：charts ────────────────────────────────────────────────────────
 
-def _chart_parts(zf: zipfile.ZipFile, sheet_part: str) -> list[str]:
+def _chart_parts(zf: zipfile.ZipFile, sheet_part: str, rel_type: str = "/chart") -> list[str]:
     charts = []
     for d in _read_rels(zf, sheet_part):
         if d["Type"].endswith("/drawing"):
-            charts += [r["Target"] for r in _read_rels(zf, d["Target"]) if r["Type"].endswith("/chart")]
+            charts += [r["Target"] for r in _read_rels(zf, d["Target"]) if r["Type"].endswith(rel_type)]
     return charts
+
+
+def chartex_count(zf: zipfile.ZipFile, sheet_part: str) -> int:
+    """Number of Excel 2016+ charts (chartEx: 直方圖, 瀑布圖…) on the sheet.
+    Their XML differs from classic charts and is not inspected."""
+    return len(_chart_parts(zf, sheet_part, "/chartEx"))
 
 
 def _strcache_values(container):
@@ -358,7 +410,8 @@ def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES) -> di
     merged = [str(r) for r in ws.merged_cells.ranges]
     a1_merged = next((m for m in merged if m.startswith("A1:")), None)
     a1_val = ws["A1"].value
-    centered_across = ws["A1"].alignment.horizontal in ("center", "centerContinuous")
+    a1_horizontal = ws["A1"].alignment.horizontal
+    centered_across = a1_horizontal in ("center", "centerContinuous")
 
     avg_row = next(
         (r for r in range(1, ws.max_row + 1) if ws.cell(row=r, column=1).value == "班平均"),
@@ -430,6 +483,9 @@ def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES) -> di
         "a1_value": a1_val,
         "a1_center_or_merged": bool(merged) or centered_across,
         "a1_merged_range": a1_merged,
+        "a1_horizontal": a1_horizontal,
+        # 合併後置中 (rubric 2.2): A1:G1 merged and centred
+        "a1_merge_and_center": a1_merged == "A1:G1" and centered_across,
         "header_text_preserved": a1_val == "經濟甲班 期中考成績表",
         "avg_row_index": avg_row,
         "g3_g15_average_formulas_ok": g_formulas_ok,
@@ -485,17 +541,21 @@ def inspect_submission(xlsx_path: str | Path, question_path: str | Path | None =
         out["sheet_names"] = names
         out["missing_sheets"] = [s for s in EXPECTED_SHEETS if s not in names and s not in ambiguous]
         out["ambiguous_sheets"] = ambiguous
-        out["pivot_薪資"] = pivot_info(zf, parts[names[SHEET_SALARY]]) if SHEET_SALARY in names else None
+        out["pivot_薪資"] = find_salary_pivot(zf, parts, names.get(SHEET_SALARY))
         out["chart_車輛銷售"] = (
             chart_info(zf, parts[names[SHEET_VEHICLE]], "barChart") if SHEET_VEHICLE in names else None
         )
         out["chart_武將能力"] = (
             chart_info(zf, parts[names[SHEET_GENERAL]], "radarChart") if SHEET_GENERAL in names else None
         )
+        out["chartex_count"] = {
+            s: chartex_count(zf, parts[names[s]]) for s in (SHEET_VEHICLE, SHEET_GENERAL) if s in names
+        }
 
-    wb = load_workbook(xlsx_path, data_only=False)
+    wb =load_workbook(xlsx_path, data_only=False)
     if out["pivot_薪資"]:
-        out["pivot_薪資"]["value_number_formats"] = pivot_output_number_format(wb, names[SHEET_SALARY])
+        pivot = out["pivot_薪資"]
+        pivot["value_number_formats"] = pivot_output_number_format(wb, pivot["host_sheet"], pivot["location"])
     out["成績"] = (
         grades_sheet_info(wb, xlsx_path, names[SHEET_GRADES]) if SHEET_GRADES in names else None
     )

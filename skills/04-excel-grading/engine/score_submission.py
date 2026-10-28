@@ -57,22 +57,19 @@ class _Builder:
 def _score_salary(b: _Builder, pivot: dict | None):
     if not pivot:
         b.zero_all(("1.1", "1.2", "1.3", "1.4", "1.5"),
-                   "【薪資】活頁未建立樞紐表（已排除【考題】活頁範例），考題1全部0分。")
+                   "未建立以【薪資】資料為來源的樞紐表（已排除【考題】活頁範例），考題1全部0分。")
         return
 
-    b.add("1.1", 5, "【薪資】活頁已建立樞紐表。")
+    b.add("1.1", 5, f"已在【{pivot.get('host_sheet')}】活頁建立以【薪資】資料為來源的樞紐表。")
 
     rows = set(_clean_set(pivot.get("row_visible_labels")))
     cols = _clean_set(pivot.get("col_visible_labels"))
     row_ok = {"男", "女"} <= rows
-    if cols == ["業務"]:
-        col_ok, col_note, col_review = True, "欄標籤只篩出「業務」", False
-    elif _exact_set(cols, {"業務", "會計", "門市"}):
-        col_ok, col_note, col_review = True, "欄標籤完整顯示業務/會計/門市（折衷微調，給滿分）", False
-    else:
-        col_ok, col_note, col_review = False, f"欄標籤為 {cols or '未設定'}，未只篩出「業務」", bool(cols)
+    # only 業務 left earns the 5 points; anything else (all three departments included) loses them
+    col_ok = cols == ["業務"]
+    col_note = "欄標籤只篩出「業務」" if col_ok else f"欄標籤為 {cols or '未設定'}，未只留下「業務」，扣5分"
     row_note = "列標籤同時有男、女" if row_ok else f"列標籤為 {sorted(rows) or '未設定'}，缺男或女"
-    b.add("1.2", (5 if col_ok else 0) + (5 if row_ok else 0), f"{col_note}；{row_note}。", col_review)
+    b.add("1.2", (5 if col_ok else 0) + (5 if row_ok else 0), f"{col_note}；{row_note}。")
 
     subtotal = (pivot.get("data_fields") or [{}])[0].get("subtotal")
     if subtotal == "average":
@@ -119,20 +116,23 @@ def _score_grades(b: _Builder, g: dict | None):
         note = f"凍結窗格為 {fp or '未設定'}" + (f"（{'、'.join(parts)}）" if parts else "")
         b.add("2.1", (2 if row_ok else 0) + (2 if col_ok else 0), note + "。", not known)
 
+    # 合併後置中 on exactly A1:G1 and the title text are scored separately (2 + 2)
     a1_merge = g.get("a1_merged_range")
-    if a1_merge and a1_merge != "A1:G1":
-        # merged past A1:G1 (e.g. A1:H1): the 跨欄置中 half is lost, the title half still counts
-        if g.get("header_text_preserved"):
-            b.add("2.2", 2, f"跨欄置中範圍為 {a1_merge}，超出 A1:G1，此半不給分；標題文字維持原文，給另一半。")
-        else:
-            b.add("2.2", 0, f"跨欄置中範圍為 {a1_merge}，超出 A1:G1，且標題文字被改為「{g.get('a1_value')}」。")
-    elif g.get("a1_center_or_merged"):
-        if g.get("header_text_preserved"):
-            b.add("2.2", 4, "A1:G1 已跨欄置中，標題文字維持「經濟甲班 期中考成績表」。")
-        else:
-            b.add("2.2", 2, f"A1:G1 已跨欄置中，但標題文字被改為「{g.get('a1_value')}」。")
+    if g.get("a1_merge_and_center"):
+        merge_pts, merge_note = 2, "A1:G1 已合併後置中"
+    elif a1_merge and a1_merge != "A1:G1":
+        merge_pts, merge_note = 0, f"合併範圍為 {a1_merge}，不是剛好 A1:G1"
+    elif a1_merge:
+        merge_pts, merge_note = 0, "A1:G1 已合併但未置中"
+    elif g.get("a1_horizontal") == "centerContinuous":
+        merge_pts, merge_note = 0, "A1 只設跨欄置中、未合併儲存格"
     else:
-        b.add("2.2", 0, "A1:G1 未設定跨欄置中。")
+        merge_pts, merge_note = 0, "A1:G1 未合併後置中"
+    if g.get("header_text_preserved"):
+        title_pts, title_note = 2, "標題文字為「經濟甲班 期中考成績表」"
+    else:
+        title_pts, title_note = 0, f"標題文字被改為「{g.get('a1_value')}」"
+    b.add("2.2", merge_pts + title_pts, f"{merge_note}；{title_note}。")
 
     avg_row = g.get("avg_row_index")
     half_g = 4.5 if g.get("g3_g15_average_formulas_ok") else 0
@@ -188,37 +188,43 @@ def _score_grades(b: _Builder, g: dict | None):
     cell = g.get("g_avg_row_cell") or {}
     if avg_row and cell.get("is_empty"):
         review = not g.get("g3_g15_average_formulas_ok")
-        b.add("2.6", 3, f"G{avg_row} 未使用公式，額外加分。"
+        b.add("2.6", 3, f"G{avg_row} 未填入公式、數值或文字，額外加分。"
               + ("（但 G3:G15 也未作答，請確認是否仍給分）" if review else ""), review)
     else:
-        b.add("2.6", 0, f"G{avg_row or 16} 有公式或數值（{cell.get('value')}），不給額外加分。")
+        b.add("2.6", 0, f"G{avg_row or 16} 有公式、數值或文字（{cell.get('value')}），不給額外加分。")
 
 
 # ── 考題3 / 考題4 ──────────────────────────────────────────────────────────
 
-def _chart_gate(chart: dict | None, raw: dict | None) -> str | None:
-    """Return a reason to zero the whole section, or None if gradable."""
+def _chart_gate(chart: dict | None, raw: dict | None, expected_type: str, type_name: str,
+                chartex: int = 0) -> tuple[str, bool] | None:
+    """Return (reason, needs_review) to zero the whole section, or None if gradable.
+    Only the expected chart type counts; any other type zeroes the section (rubric 3.1 / 4.1)."""
     if raw and not raw.get("unchanged"):
         cells = "、".join(d["cell"] for d in raw.get("diffs", []))
-        return f"A欄或第2列原始資料被更動（{cells}），整大題0分。"
+        return f"A欄或第2列原始資料被更動（{cells}），整大題0分。", False
     if chart is None:
-        return "活頁中沒有圖表，整大題0分。"
+        if chartex:
+            return ("活頁只有 Excel 2016 以後的新式圖表（如直方圖），程式無法判讀，"
+                    "暫給0分，請人工確認。"), True
+        return "活頁中沒有圖表，整大題0分。", False
     if chart.get("literal_only") or not chart.get("is_dynamic"):
-        return "圖表為貼上的固定數值（非動態參照儲存格），整大題0分。"
+        return "圖表為貼上的固定數值（非動態參照儲存格），整大題0分。", False
+    if chart.get("chart_type") != expected_type:
+        return f"圖表類型為 {chart.get('chart_type')}，不是{type_name}，整大題0分。", False
     return None
 
 
-def _score_vehicle(b: _Builder, chart: dict | None, raw: dict | None):
+def _score_vehicle(b: _Builder, chart: dict | None, raw: dict | None, chartex: int = 0):
     codes = ("3.1", "3.2", "3.3", "3.4")
-    reason = _chart_gate(chart, raw)
-    if reason:
-        b.zero_all(codes, reason)
+    gate = _chart_gate(chart, raw, "barChart", "長條圖／直條圖", chartex)
+    if gate:
+        for code in codes:
+            b.add(code, 0, *gate)
         return
 
-    if chart.get("chart_type") == "barChart":
-        b.add("3.1", 5, "已建立動態的" + ("立體" if chart.get("is_3d") else "") + "直條圖／橫條圖。")
-    else:
-        b.add("3.1", 0, f"圖表類型為 {chart.get('chart_type')}，非直條圖或橫條圖。", True)
+    b.add("3.1", 5, "已建立動態的" + ("立體" if chart.get("is_3d") else "")
+          + ("橫條圖。" if chart.get("bar_dir") == "bar" else "直條圖。"))
 
     cats = _clean_set(chart.get("categories"))
     cat_ok = _exact_set(cats, VEHICLE_CATEGORIES)
@@ -262,15 +268,13 @@ def _score_vehicle(b: _Builder, chart: dict | None, raw: dict | None):
 
 def _score_general(b: _Builder, chart: dict | None, raw: dict | None):
     codes = ("4.1", "4.2", "4.3")
-    reason = _chart_gate(chart, raw)
-    if reason:
-        b.zero_all(codes, reason)
+    gate = _chart_gate(chart, raw, "radarChart", "雷達圖")
+    if gate:
+        for code in codes:
+            b.add(code, 0, *gate)
         return
 
-    if chart.get("chart_type") == "radarChart":
-        b.add("4.1", 5, "已建立動態的雷達圖。")
-    else:
-        b.add("4.1", 0, f"圖表類型為 {chart.get('chart_type')}，非雷達圖。", True)
+    b.add("4.1", 5, "已建立動態的雷達圖。")
 
     cats = _clean_set(chart.get("categories"))
     series = _clean_set(chart.get("series_names"))
@@ -324,6 +328,9 @@ def score_facts(facts: dict, student: StudentInfo) -> GradeResult:
 
     _score_salary(b, facts.get("pivot_薪資"))
     _score_grades(b, facts.get("成績"))
-    _score_vehicle(b, facts.get("chart_車輛銷售"), facts.get("車輛銷售_raw_data_check"))
+    chartex = facts.get("chartex_count") or {}
+    _score_vehicle(b, facts.get("chart_車輛銷售"), facts.get("車輛銷售_raw_data_check"),
+                   chartex.get("車輛銷售", 0))
+    # only 3.x accepts 直方圖 (a chartEx chart); 4.x accepts radar charts only
     _score_general(b, facts.get("chart_武將能力"), facts.get("武將能力_raw_data_check"))
     return GradeResult(student, b.items, warnings)
