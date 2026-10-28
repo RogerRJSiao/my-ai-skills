@@ -109,7 +109,7 @@ S06_<yyyymm>/
 學生檔案**一律讀梯次的 `02_work/Excel/`**（由 `copy_to_work.py` 從 submissions 複製過來的合規檔案），
 不要直接讀 `00_input/submissions/`；不在 02_work 的檔案不納入評分。對 `02_work/Excel/` 下的每個 .xlsx：
 
-1. 用 `python engine/extract_submission.py <梯次>/02_work/Excel/<學生檔案> --question <梯次>/01_template/S06_excel_question_v1.xlsx`
+1. 用 `python engine/extract_submission.py <梯次>/02_work/Excel/<學生檔案> --question <梯次>/01_template/S06_excel_question_v<最大版本>.xlsx`
    跑一次（只需要 openpyxl），拿到結構化 JSON（pivot table 設定、圖表動態性與座標軸/圖例內容、
    凍結窗格、合併/跨欄置中、框線、排序/篩選、公式）。
 2. 對照 `references/scoring_checks.md` 的規則，逐一判斷 18 個小項的得分，

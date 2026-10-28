@@ -1,12 +1,11 @@
 """Extract objective grading facts from one S06 Excel實作 submission.
 
 The single implementation of the fact extraction: the xlsx_s06 engine imports
-it, and it also runs on its own (only openpyxl needed), replacing the former
-scripts/inspect_submission.py:
+it, and it also runs on its own (only openpyxl needed):
 
     python engine/extract_submission.py <submission.xlsx> [--question <question.xlsx>]
 
-prints the facts as JSON. Keys beyond the original script's:
+prints the facts as JSON. Notable keys:
 
     chart_*:  chart_count, bar_dir, is_3d, radar_style, has_data_table
     成績:     sort_conditions, filter_conditions, a1_merged_range, row_avg_uses_subtotal
