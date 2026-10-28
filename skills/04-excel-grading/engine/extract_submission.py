@@ -10,6 +10,7 @@ prints the facts as JSON. Keys beyond the original script's:
 
     chart_*:  chart_count, bar_dir, is_3d, radar_style, has_data_table
     成績:     sort_conditions, filter_conditions, a1_merged_range, row_avg_uses_subtotal
+    top level: sheet_names, ambiguous_sheets (sheet names may carry a prefix/suffix)
 
 This module does NOT compute scores; see score_submission.py.
 """
@@ -118,6 +119,25 @@ def sheet_parts(zf: zipfile.ZipFile) -> dict[str, str]:
         if target:
             out[sheet.attrib.get("name")] = target
     return out
+
+
+def resolve_sheet_names(names) -> tuple[dict[str, str], dict[str, list[str]]]:
+    """Map each expected sheet to the student's actual sheet name.
+
+    A sheet name may carry a prefix/suffix around the expected text
+    (e.g. 「1.薪資」「成績_作答」). An exact match wins; otherwise the one
+    sheet whose name contains the text is used. Several such sheets are
+    ambiguous: none is picked, and they are returned for the caller to confirm."""
+    names = [n for n in names if n]
+    resolved, ambiguous = {}, {}
+    for expected in EXPECTED_SHEETS:
+        exact = [n for n in names if n.strip() == expected]
+        found = exact or [n for n in names if expected in n]
+        if len(found) == 1:
+            resolved[expected] = found[0]
+        elif found:
+            ambiguous[expected] = found
+    return resolved, ambiguous
 
 
 # ── 考題1 薪資：pivot table ────────────────────────────────────────────────
@@ -333,8 +353,8 @@ def chart_info(zf: zipfile.ZipFile, sheet_part: str, preferred_type: str | None 
 
 # ── 考題2 成績 ─────────────────────────────────────────────────────────────
 
-def grades_sheet_info(wb, xlsx_path: Path) -> dict:
-    ws = wb[SHEET_GRADES]
+def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES) -> dict:
+    ws = wb[sheet_name]
     merged = [str(r) for r in ws.merged_cells.ranges]
     a1_merged = next((m for m in merged if m.startswith("A1:")), None)
     a1_val = ws["A1"].value
@@ -427,12 +447,13 @@ def grades_sheet_info(wb, xlsx_path: Path) -> dict:
     }
 
 
-def raw_data_unchanged(wb_sub, wb_q, sheet_name: str) -> dict:
+def raw_data_unchanged(wb_sub, wb_q, sheet_name: str, sub_sheet_name: str | None = None) -> dict:
     """Compare A-column categories and row-2 headers with the question file.
     Leading/trailing whitespace is ignored: the question's D2 「程遠志」 carries a
-    trailing Tab, and deleting it is not a change (rubric 4.1)."""
+    trailing Tab, and deleting it is not a change (rubric 4.1).
+    `sub_sheet_name` is the student's sheet name when it has a prefix/suffix."""
     col_range, row2_range = RAW_DATA_CELLS[sheet_name]
-    ws_sub, ws_q = wb_sub[sheet_name], wb_q[sheet_name]
+    ws_sub, ws_q = wb_sub[sub_sheet_name or sheet_name], wb_q[sheet_name]
 
     def norm(v):
         return v.strip() if isinstance(v, str) else v
@@ -450,33 +471,41 @@ def raw_data_unchanged(wb_sub, wb_q, sheet_name: str) -> dict:
 def inspect_submission(xlsx_path: str | Path, question_path: str | Path | None = None) -> dict:
     """Return the facts as a dict (the JSON printed by the command line).
 
-    `missing_sheets` lists expected sheets that are absent; the caller should
+    Sheet names may have a prefix/suffix (see resolve_sheet_names);
+    `sheet_names` maps each expected sheet to the name actually used.
+    `missing_sheets` lists expected sheets that are absent and
+    `ambiguous_sheets` those matched by several sheets; the caller should
     ask the user before grading such a file."""
     xlsx_path = Path(xlsx_path)
     out: dict = {"file": str(xlsx_path)}
 
     with zipfile.ZipFile(xlsx_path) as zf:
         parts = sheet_parts(zf)
-        out["missing_sheets"] = [s for s in EXPECTED_SHEETS if s not in parts]
-        out["pivot_薪資"] = pivot_info(zf, parts[SHEET_SALARY]) if SHEET_SALARY in parts else None
+        names, ambiguous = resolve_sheet_names(parts)
+        out["sheet_names"] = names
+        out["missing_sheets"] = [s for s in EXPECTED_SHEETS if s not in names and s not in ambiguous]
+        out["ambiguous_sheets"] = ambiguous
+        out["pivot_薪資"] = pivot_info(zf, parts[names[SHEET_SALARY]]) if SHEET_SALARY in names else None
         out["chart_車輛銷售"] = (
-            chart_info(zf, parts[SHEET_VEHICLE], "barChart") if SHEET_VEHICLE in parts else None
+            chart_info(zf, parts[names[SHEET_VEHICLE]], "barChart") if SHEET_VEHICLE in names else None
         )
         out["chart_武將能力"] = (
-            chart_info(zf, parts[SHEET_GENERAL], "radarChart") if SHEET_GENERAL in parts else None
+            chart_info(zf, parts[names[SHEET_GENERAL]], "radarChart") if SHEET_GENERAL in names else None
         )
 
     wb = load_workbook(xlsx_path, data_only=False)
     if out["pivot_薪資"]:
-        out["pivot_薪資"]["value_number_formats"] = pivot_output_number_format(wb, SHEET_SALARY)
-    out["成績"] = grades_sheet_info(wb, xlsx_path) if SHEET_GRADES in wb.sheetnames else None
+        out["pivot_薪資"]["value_number_formats"] = pivot_output_number_format(wb, names[SHEET_SALARY])
+    out["成績"] = (
+        grades_sheet_info(wb, xlsx_path, names[SHEET_GRADES]) if SHEET_GRADES in names else None
+    )
 
     if question_path:
         wb_sub = load_workbook(xlsx_path, data_only=True)
         wb_q = load_workbook(question_path, data_only=True)
         for sheet in (SHEET_VEHICLE, SHEET_GENERAL):
             out[f"{sheet}_raw_data_check"] = (
-                raw_data_unchanged(wb_sub, wb_q, sheet) if sheet in wb_sub.sheetnames else None
+                raw_data_unchanged(wb_sub, wb_q, sheet, names[sheet]) if sheet in names else None
             )
     return out
 

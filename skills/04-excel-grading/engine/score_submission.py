@@ -309,6 +309,13 @@ def score_facts(facts: dict, student: StudentInfo) -> GradeResult:
         warnings.append(f"檔名「{student.filename}」不符合「部門代號-工號-姓名.xlsx」格式，請向使用者確認。")
     if facts.get("missing_sheets"):
         warnings.append(f"找不到工作表：{'、'.join(facts['missing_sheets'])}，請確認檔案是否正確。")
+    for expected, found in (facts.get("ambiguous_sheets") or {}).items():
+        warnings.append(f"有多個工作表名稱含「{expected}」（{'、'.join(found)}），無法判斷要評哪一個，"
+                        f"該大題以0分計，請向使用者確認。")
+    renamed = {e: n for e, n in (facts.get("sheet_names") or {}).items() if n != e}
+    if renamed:
+        warnings.append("工作表名稱有前後綴，已對應為："
+                        + "、".join(f"{e}→「{n}」" for e, n in renamed.items()) + "。")
     if "車輛銷售_raw_data_check" not in facts:
         warnings.append("未提供原始題目檔，無法檢查原始資料是否被更動。")
     for key in ("chart_車輛銷售", "chart_武將能力"):
