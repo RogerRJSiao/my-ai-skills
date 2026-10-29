@@ -69,7 +69,9 @@ kd-grading-internal --help                                    # 安裝後的 ent
 
 ### 04-excel-grading（engine `xlsx_s06`）計分重點
 
-- **規則來源：** 完全依照 `skills/04-excel-grading/references/scoring_checks.md`，包含這些「連坐」規則：
+- **規則來源：** 標準是評閱標準 `S06_excel_scoring_criteria_v<最大版本>.xlsx`；
+  engine 依照據此整理的 `skills/04-excel-grading/references/scoring_checks.md` 計分。
+  三者不一致時以 xlsx 為準，修改 md 與 engine。包含這些「連坐」規則：
   - 沒有以【薪資】A1:J13 為來源的樞紐表（可放在其他活頁，排除【考題】範例）→ 1.x 全部 0 分。
   - 車輛銷售／武將能力的第A欄（A2:A7）或第2列（A2:E2）原始資料被改 → 3.x／4.x 全部 0 分。
   - 圖表非動態或類型不對（3.x 只限長條圖／直條圖／直方圖，4.x 只限雷達圖）→ 3.x／4.x 全部 0 分。

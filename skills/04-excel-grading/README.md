@@ -65,6 +65,8 @@
 
 - **評分依據以「評閱標準」文字敘述為準**：不是拿學生檔案跟標準解答檔逐格
   diff，因為同一評分標準底下可能有多種合格的呈現方式。
+- **標準的優先順序是 評閱標準 xlsx（最新版本）＞ `scoring_checks.md` ＞ `engine/` 的 py**：
+  md 與 py 都照 xlsx 撰寫；三者不一致時以 xlsx 為準，修改 md 與 py。
 - **`engine/extract_submission.py` 只萃取客觀事實，不計分**：樞紐表設定、圖表動態性、
   凍結窗格、合併儲存格、框線、排序/篩選、公式等。純 skill 使用時由模型依
   `scoring_checks.md` 的規則判斷得分；透過 MCP 時由 `engine/score_submission.py`

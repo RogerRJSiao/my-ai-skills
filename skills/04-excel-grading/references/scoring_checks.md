@@ -1,9 +1,13 @@
 # S06 Excel實作 — 逐項評分細則與檢查方法
 
-本文件補充 `assets/01_template/S06_excel_scoring_criteria_v1.xlsx` 的文字敘述，記錄「怎麼從
+本文件補充評閱標準 `S06_excel_scoring_criteria_v<最大版本>.xlsx`（梯次的
+`01_template/`，沒有梯次時用本 skill 的 `assets/01_template/`）的文字敘述，記錄「怎麼從
 .xlsx 檔案裡技術性地驗證每一小項」，以及批改過程中已經遇過的實際案例（正確
 做法 / 常見錯誤）。搭配 `engine/extract_submission.py` 的輸出一起讀。
-**評分標準以評閱標準 xlsx 為準**：本文件與程式若和它不一致，要改本文件與程式。
+
+**標準的優先順序**：評閱標準 xlsx（最新版本）＞ 本文件 ＞ `engine/` 的 py 程式。
+本文件與程式都是照 xlsx 寫的，三者若不一致，一律以 xlsx 為準，回頭修改本文件與
+程式，不要反過來遷就程式的現況。
 
 18 個小項、大項與滿分（含額外加分）彙總表：
 

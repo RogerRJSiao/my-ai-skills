@@ -29,6 +29,11 @@ description: Standard operating procedure for grading "S06" Excel實作 (pivot t
 詳細的逐小項技術檢查方法、常見錯誤案例、已知檔案的評分結果對照表，都在
 `references/scoring_checks.md`，開始評分前先讀過一遍。
 
+**標準的優先順序**：評閱標準 xlsx（版本號最大的那份，或使用者這次提供的版本）
+＞ `references/scoring_checks.md` ＞ `engine/` 的 py 程式。md 與 py 都是照 xlsx 寫的；
+發現三者不一致時，一律以 xlsx 為準，回頭修改 md 與 py，並在回覆中告訴使用者哪裡
+不一致，不要照程式或 md 的現況評分。
+
 ## 梯次資料夾與工具（scripts/、engine/）
 
 每一梯次的資料放在 `<資料根目錄>/grading/training_internal/S06_<yyyymm>/`，資料根目錄

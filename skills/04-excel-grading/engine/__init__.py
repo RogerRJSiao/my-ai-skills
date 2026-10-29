@@ -7,6 +7,9 @@ extract_submission: extract objective facts from a submission (also a CLI)
 extract_rubric    : built-in point table + reader for 評閱標準.xlsx
 score_submission  : references/scoring_checks.md rules -> GradeResult
 results           : writes the 單科 評分結果 workbook (評分細項 + 評分結果表)
+
+The standard is the 評閱標準 xlsx (latest version) > references/scoring_checks.md
+> this engine. When they disagree, follow the xlsx and fix the md and the code.
 """
 from __future__ import annotations
 

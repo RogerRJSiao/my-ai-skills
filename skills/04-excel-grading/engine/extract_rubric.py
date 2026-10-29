@@ -1,5 +1,8 @@
 """The S06 rubric: the built-in point table the scorer uses, and a reader for
-評閱標準.xlsx so a newer rubric file can be compared against it."""
+評閱標準.xlsx so a newer rubric file can be compared against it.
+
+The xlsx is the standard: when compare_with_builtin reports a diff, update
+BUILTIN_RUBRIC (and the table in references/scoring_checks.md) to match it."""
 from __future__ import annotations
 
 import re
@@ -27,7 +30,7 @@ class RubricItem:
         return {**asdict(self), "max_score": self.max_score}
 
 
-# Mirrors the table at the top of references/scoring_checks.md.
+# Mirrors the 評閱標準 xlsx (and the table at the top of references/scoring_checks.md).
 BUILTIN_RUBRIC: tuple[RubricItem, ...] = (
     RubricItem("考題1.薪資", "1.1", "作答狀態初步判斷", 5, 0),
     RubricItem("考題1.薪資", "1.2", "欄列標籤選取", 10, 0),

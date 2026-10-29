@@ -1,5 +1,9 @@
 """Apply references/scoring_checks.md to the facts from engine/extract_submission.py.
 
+The standard is the 評閱標準 xlsx (S06_excel_scoring_criteria_v<latest>.xlsx);
+scoring_checks.md and this module are written from it. When they disagree,
+the xlsx wins: fix the md and this code, never grade by the code as it stands.
+
 Every item gets a score, a 評閱結果說明 note, and a `needs_review` flag for
 the cases the SOP says a human (or the model) must confirm, such as a chart
 Data Table that might count as 運算列表資料標籤. Callers can override any
