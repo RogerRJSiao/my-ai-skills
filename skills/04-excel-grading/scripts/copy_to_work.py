@@ -12,7 +12,8 @@ A file is copied only when all of these hold:
   2. that folder is named 單位-6碼工號-姓名
   3. the file is named 單位-6碼工號-姓名.<ext> (xlsx, docx or pptx)
   4. the folder's 單位-工號-姓名 is one row (單位, 工號, 姓名) of the roster
-     00_input/roster/<課程>_三科_學員名冊<梯次>.xlsx (單位 ignores case)
+     00_input/roster/<課程>_三科_學員名冊<梯次>.xlsx, exactly as written there
+     (單位 case included: p5c00 is not P5C00)
   5. the file name uses the same 單位-工號-姓名 as its folder
 姓名 may not contain "-", "." or whitespace. Everything else is listed with
 the reason it was skipped. Sources are only read; existing files in 02_work
@@ -42,14 +43,8 @@ FOLDER_RE = re.compile(rf"{STEM}")
 ROSTER_HEADERS = ["id", "姓名", "工號", "單位"]
 
 
-def norm(key: str) -> str:
-    """單位-工號-姓名 with 單位 upper-cased, so p1820 and P1820 compare equal."""
-    unit, rest = key.split("-", 1)
-    return f"{unit.upper()}-{rest}"
-
-
 def roster_keys(roster_dir: Path, course: str, batch: str) -> tuple[Path, set[str]]:
-    """The batch roster and its 單位-工號-姓名 combinations (normalised)."""
+    """The batch roster and its 單位-工號-姓名 combinations, exactly as written there."""
     name = f"{course}_三科_學員名冊{batch}.xlsx"
     path = roster_dir / name
     if not path.is_file():
@@ -59,7 +54,7 @@ def roster_keys(roster_dir: Path, course: str, batch: str) -> tuple[Path, set[st
     header = [str(h).strip() if h is not None else "" for h in next(rows, ())]
     if header[:4] != ROSTER_HEADERS:
         sys.exit(f"{name} 的表頭應為 {ROSTER_HEADERS}，實際為 {header[:4]}")
-    keys = {norm(f"{str(r[3]).strip()}-{str(r[2]).strip()}-{str(r[1]).strip()}")
+    keys = {f"{str(r[3]).strip()}-{str(r[2]).strip()}-{str(r[1]).strip()}"
             for r in rows if r and all(r[i] not in (None, "") for i in (1, 2, 3))}
     wb.close()
     if not keys:
@@ -81,9 +76,9 @@ def plan(submissions: Path, work: Path, ext: str, roster: set[str]):
             out.append((src, None, "skip: 資料夾名稱不是 單位-工號-姓名"))
         elif not file_re.fullmatch(src.name):
             out.append((src, None, "skip: 檔名不是 單位-工號-姓名." + ext))
-        elif norm(rel.parts[0]) not in roster:
+        elif rel.parts[0] not in roster:
             out.append((src, None, "skip: 資料夾的 單位-工號-姓名 不在學員名冊"))
-        elif norm(src.stem) != norm(rel.parts[0]):
+        elif src.stem != rel.parts[0]:
             out.append((src, None, "skip: 檔名與資料夾的 單位-工號-姓名 不一致"))
         elif (work / src.name).exists() or src.name.lower() in taken:
             out.append((src, work / src.name, "skip: 02_work 已有同名檔案"))

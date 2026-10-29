@@ -20,7 +20,7 @@ build_all_report.py — build the batch's 三科 學員檔案與成績計算 wor
 manifest columns (rules shared with the MCP server's manifest):
   歸檔異常  path is not <課程>/<單位-工號-姓名>/<檔名>, the folder is not
             單位-6碼工號-姓名, the file is not 單位-6碼工號-姓名.docx|xlsx|pptx,
-            the folder's 單位-工號-姓名 is not a roster row (單位 ignores case),
+            the folder's 單位-工號-姓名 is not exactly a roster row (單位 case included),
             or the file name differs from its folder (same rules as copy_to_work.py)
   姓名/工號/單位(來自檔名)/副檔名  split literally from the file name
   命名異常  the file name's 6碼工號 + 姓名 is not one roster student
@@ -137,12 +137,6 @@ def group_code(n: int) -> str:
     return code
 
 
-def norm_path(key: str) -> str:
-    """單位-工號-姓名 with 單位 upper-cased, so p1820 and P1820 compare equal."""
-    unit, _, rest = key.partition("-")
-    return f"{unit.upper()}-{rest}"
-
-
 def build_manifest(listing: Path, submissions: Path, course: str, roster: list[tuple]):
     """(sheet rows, owner (工號, 姓名) per row, (檔名, local copy or None) per row).
     The owner is the folder's 工號 + 姓名 when the folder is 單位-6碼工號-姓名,
@@ -151,8 +145,8 @@ def build_manifest(listing: Path, submissions: Path, course: str, roster: list[t
     cloud_at = f"{m.group(1)} {m.group(2)}:{m.group(3)}:{m.group(4)}" if m else None
     review_at = dt.datetime.now().strftime(TIME_FMT)
     roster_keys = {(str(r[2]).strip(), str(r[1]).strip()) for r in roster}
-    # 單位-工號-姓名 of every roster student (單位 upper-cased), as copy_to_work.py checks
-    roster_paths = {f"{str(r[3]).strip().upper()}-{str(r[2]).strip()}-{str(r[1]).strip()}" for r in roster}
+    # 單位-工號-姓名 of every roster student, exactly as written there, as copy_to_work.py checks
+    roster_paths = {f"{str(r[3]).strip()}-{str(r[2]).strip()}-{str(r[1]).strip()}" for r in roster}
     with listing.open(encoding="utf-8-sig", newline="") as f:
         records = list(csv.DictReader(f))
     for col in ("檔名", "檔案路徑", "檔案大小(KB)"):
@@ -168,8 +162,8 @@ def build_manifest(listing: Path, submissions: Path, course: str, roster: list[t
         folder = rel[0] if len(rel) == 2 else None
         unit, emp_id, name, ext = split_filename(filename)
         archive = not (folder and FOLDER_RE.fullmatch(folder) and FILE_RE.fullmatch(filename)
-                       and norm_path(folder) in roster_paths                       # folder = a roster row
-                       and norm_path(filename.rsplit(".", 1)[0]) == norm_path(folder))  # file = folder
+                       and folder in roster_paths                       # folder = a roster row
+                       and filename.rsplit(".", 1)[0] == folder)        # file = folder
         naming = not (emp_id and name and re.fullmatch(r"\d{6}", emp_id) and (emp_id, name) in roster_keys)
         local = submissions.joinpath(*rel) if rel else None
         sha = sha8(local) if local and local.is_file() else None

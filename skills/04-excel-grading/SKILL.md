@@ -57,10 +57,27 @@ S06_<yyyymm>/
 |---|---|
 | `python scripts/init_batch.py --batch <yyyymm> [--dry-run]` | 建立梯次資料夾並複製樣板；已存在的檔案一律不覆寫 |
 | `python scripts/check_batch.py --batch <yyyymm>` | 評分前檢查六項：清單、名冊有資料、submissions 有資料夾、01_template 三份檔案（顯示版本與修改日；檔名要和本 skill `assets/01_template/` 的完全相同，目前是 `_v1`）、02_work 淨空、03_results 只有樣板。唯讀 |
-| `python scripts/copy_to_work.py --batch <yyyymm> [--type all\|xlsx\|docx\|pptx] [--dry-run]` | 預設三種檔案都處理（`--type` 可只選一種），把合規的檔案複製到 02_work/Excel｜Word｜PPT：路徑是 `submissions/<單位-工號-姓名>/<單位-工號-姓名>.<副檔名>`，資料夾與檔名的單位-工號-姓名一致，且是 00_input/roster 學員名冊中的一列（單位不分大小寫）；其餘列出略過原因，02_work 已有的不合規檔案只提醒、不刪除。不解壓縮 zip／7z／rar，不覆寫 02_work 已有的檔案 |
-| `python scripts/build_all_report.py --batch <yyyymm>` | 三科單科評分都完成後執行：複製 03_results 的 `temp_<課程>_三科_學員檔案與成績計算yyyymm_v1.xlsx` 成 `<課程>_三科_學員檔案與成績計算<梯次>_<yyyymmdd_HHMMSS>.xlsx`；活頁 manifest 依原始檔案清單填入每個檔案與歸檔／命名／重複異常（歸檔異常與 copy_to_work.py 同規則：資料夾的單位-工號-姓名須是名冊一列、檔名須與資料夾一致）；活頁 score 依學員名冊順序填入學員，並把各科 `<課程>_<Excel\|Word\|PPT>_評分結果<梯次>_<yyyymmdd_HHMMSS>.xlsx`「評分結果表」的分數加總填入 Excel原始／Word原始／PPT原始（以**工號＋姓名**比對，共用工號的學生也能各自對應；同一組工號＋姓名在單科檔出現多次時採用第一筆並提醒；缺檔的科目留空白；單科檔沒評到分的學員以 0 分計，視為歸檔異常）；歸檔異常、命名異常（含未繳交）的科目，原始與 Excel／Word／PPT 欄都填 0，其餘 Excel／Word／PPT 為原始分數（上限 100）；備註依科目寫出異常與封頂原因。總分、是否合格不填。不需要 MCP |
+| `python scripts/copy_to_work.py --batch <yyyymm> [--type all\|xlsx\|docx\|pptx] [--dry-run]` | 預設三種檔案都處理（`--type` 可只選一種），把合規的檔案複製到 02_work/Excel｜Word｜PPT：路徑是 `submissions/<單位-工號-姓名>/<單位-工號-姓名>.<副檔名>`，資料夾與檔名的單位-工號-姓名一致，且與 00_input/roster 學員名冊中的一列完全相同（含大小寫，見下方「學員身分比對規則」）；其餘列出略過原因，02_work 已有的不合規檔案只提醒、不刪除。不解壓縮 zip／7z／rar，不覆寫 02_work 已有的檔案 |
+| `python scripts/build_all_report.py --batch <yyyymm>` | 三科單科評分都完成後執行：複製 03_results 的 `temp_<課程>_三科_學員檔案與成績計算yyyymm_v1.xlsx` 成 `<課程>_三科_學員檔案與成績計算<梯次>_<yyyymmdd_HHMMSS>.xlsx`；活頁 manifest 依原始檔案清單填入每個檔案與歸檔／命名／重複異常（歸檔異常與 copy_to_work.py 同規則：資料夾的單位-工號-姓名須與名冊一列完全相同（含大小寫）、檔名須與資料夾一致，見下方「學員身分比對規則」）；活頁 score 依學員名冊順序填入學員，並把各科 `<課程>_<Excel\|Word\|PPT>_評分結果<梯次>_<yyyymmdd_HHMMSS>.xlsx`「評分結果表」的分數加總填入 Excel原始／Word原始／PPT原始（以**工號＋姓名**比對，共用工號的學生也能各自對應；同一組工號＋姓名在單科檔出現多次時採用第一筆並提醒；缺檔的科目留空白；單科檔沒評到分的學員以 0 分計，視為歸檔異常）；歸檔異常、命名異常（含未繳交）的科目，原始與 Excel／Word／PPT 欄都填 0，其餘 Excel／Word／PPT 為原始分數（上限 100）；備註依科目寫出異常與封頂原因。總分、是否合格不填。不需要 MCP |
 | `python engine/extract_submission.py <梯次>/02_work/Excel/<學生檔案> --question <題目檔>` | 輸出單一作答檔的客觀事實（JSON），學生檔案一律取自 02_work，見第2步 |
 | `python scripts/check_rubric.py --batch <yyyymm> [--rubric <評閱標準檔>] [--show-text]` | 依「評閱標準 xlsx（最新版本）＞ scoring_checks.md ＞ engine py」檢查。**比對的評閱標準**：`--batch` 必填，比對 `<資料根目錄>/grading/training_internal/S06_<yyyymm>/01_template/S06_excel_scoring_criteria_v*.xlsx` 版本號最大的那份（試評用的標準解答檔、題目檔也取自同一個 01_template）；`--rubric` 可改用指定的檔案。檢查四項：評閱標準版本（assets 必須有內容相同的同一份，因為 MCP 評分用的是 assets 那份）、小項與配分、評分標準文字裡的關鍵數值（範圍、儲存格、標籤、門檻）與 engine 常數及 scoring_checks.md 是否一致、用 engine 試評標準解答檔（基本配分應全拿；需要 repo 的 mcp-server/src）。輸入檔只讀；結果與各小項評分標準文字寫成 `<梯次>/02_work/rubric/S06_excel_scoring_criteria_<yyyymmdd_HHMMSS>.md`（資料夾不存在會建立），供人工比對語意；`--show-text` 也會在終端機列出評分標準文字 |
+
+**學員身分比對規則**（`copy_to_work.py`、`build_all_report.py` 共用）：
+
+- **以學員名冊為準**：`00_input/roster/S06_三科_學員名冊<yyyymm>.xlsx` 登載的單位（部門代號）、
+  工號、姓名就是標準（名冊儲存格的前後空白不計）。作業的資料夾與檔名都必須寫成名冊上某一列的
+  `<單位>-<工號>-<姓名>`，**任何一欄不一致都視為「歸檔異常」**，包括單位的英文大小寫
+  （名冊是 `P1820`，寫成 `p1820` 就是歸檔異常）、檔名多加文字（例如 `…-徐惠妘excel.xlsx`）、
+  資料夾與檔名不一致、或檔案沒有放在 `submissions/<單位-工號-姓名>/` 這一層。
+- **格式**：單位只能是英文字母與數字，工號是 6 碼數字，姓名不可含 `-`、`.` 或空白。
+- **歸檔異常的後果**：`copy_to_work.py` 不複製到 02_work，所以不會被評分；`build_all_report.py`
+  該科的原始分數與 Excel／Word／PPT 欄都填 0，備註寫「歸檔異常」。
+- **命名異常**：另外再看檔名的 6 碼工號＋姓名是不是名冊上的學員（不看單位）；不是就標「命名異常」，
+  該科同樣 0 分。所以單位寫錯是歸檔異常，工號或姓名寫錯則同時是歸檔異常與命名異常。
+- **檔案歸屬**：三科彙總時，檔案先依資料夾的工號＋姓名、資料夾格式不對時再依檔名的工號＋姓名，
+  歸給名冊上的學生（不看單位），所以單位寫錯的檔案仍會記在正確學生名下、以歸檔異常 0 分計。
+- **同一科有多個檔案**：優先採用沒有歸檔／命名異常的那份，再取檔案 id 最小的，備註寫「多個…檔」。
+- 只有通過比對的檔案會進 02_work，所以單科結果的部門代號、工號、姓名（取自檔名）都與名冊相同。
 
 梯次的 01_template 有多個版本（_v1、_v2）時，手動評分一律取版本號最大的。
 要注意兩個工具不會跟著換版本：
