@@ -29,7 +29,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import openpyxl
-from openpyxl.utils import range_boundaries
+from openpyxl.utils import get_column_letter, range_boundaries
 
 NS = {
     "c": "http://schemas.openxmlformats.org/drawingml/2006/chart",
@@ -48,10 +48,13 @@ SHEET_VEHICLE = "車輛銷售"
 SHEET_GENERAL = "武將能力"
 EXPECTED_SHEETS = (SHEET_SALARY, SHEET_GRADES, SHEET_VEHICLE, SHEET_GENERAL)
 
-# Raw-data cells compared against the original question file:
-# column A (A2:A7) and row 2 (A2:E2), rubric 3.1 / 4.1.
-_RAW_CELLS = (["A2", "A3", "A4", "A5", "A6", "A7"], ["B2", "C2", "D2", "E2"])
-RAW_DATA_CELLS = {SHEET_VEHICLE: _RAW_CELLS, SHEET_GENERAL: _RAW_CELLS}
+# Raw-data cells compared against the original question file, rubric 3.1 / 4.1:
+# column A (車輛銷售 A2:A6, 武將能力 A2:A7) and row 2 (A2:E2).
+_ROW2 = ["B2", "C2", "D2", "E2"]
+RAW_DATA_CELLS = {
+    SHEET_VEHICLE: (["A2", "A3", "A4", "A5", "A6"], _ROW2),
+    SHEET_GENERAL: (["A2", "A3", "A4", "A5", "A6", "A7"], _ROW2),
+}
 
 # The 薪資 data a qualifying pivot must use (rubric 1.1).
 SALARY_SOURCE_RANGE = "A1:J13"
@@ -457,6 +460,36 @@ def shows_integer(cell) -> bool:
     return isinstance(cell.value, str) and bool(_ROUNDED_AVERAGE_RE.fullmatch(cell.value.upper()))
 
 
+def _sort_and_filter(root) -> tuple[list[dict], list[dict]]:
+    """(sort conditions, filter conditions) of the autoFilter / sortState in a
+    table or worksheet XML. A filter's colId counts from the first column of
+    its autoFilter range, so `column` gives the sheet column letter (G = 個人平均)."""
+    af = root.find(f"{M}autoFilter")
+    base = range_boundaries(af.attrib["ref"])[0] if af is not None and af.attrib.get("ref") else 1
+
+    def column(fc):
+        try:
+            return get_column_letter(base + int(fc.attrib.get("colId")))
+        except (TypeError, ValueError):
+            return None
+
+    sorts = [{"ref": sc.attrib.get("ref"), "descending": sc.attrib.get("descending") == "1"}
+             for sc in root.iter(f"{M}sortCondition")]
+    filters = [
+        {"col_id": fc.attrib.get("colId"), "column": column(fc),
+         "operator": f.attrib.get("operator", "equal"), "val": f.attrib.get("val")}
+        for fc in root.iter(f"{M}filterColumn")
+        for f in fc.iter(f"{M}customFilter")
+    ]
+    # a ticked value list (<filters>) is not a 數字篩選 (rubric 2.4)
+    filters += [
+        {"col_id": fc.attrib.get("colId"), "column": column(fc), "operator": "values", "val": None}
+        for fc in root.iter(f"{M}filterColumn")
+        if fc.find(f"{M}filters") is not None
+    ]
+    return sorts, filters
+
+
 def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES, wb_values=None) -> dict:
     """Facts for 考題2. `wb_values` is the workbook loaded with data_only=True;
     it supplies the cached 個人平均 values for the sort check (rubric 2.4)."""
@@ -496,37 +529,23 @@ def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES, wb_va
             if not (b.top.style or b.bottom.style or b.left.style or b.right.style):
                 missing_border.append(ws.cell(row=r, column=col).coordinate)
 
-    # openpyxl does not expose customFilters/sortState, read the table XML.
-    sort_desc = filter_gt70 = None
+    # openpyxl does not expose customFilters/sortState, so read the XML of the
+    # tables on this sheet (the question's 表格2) and of the sheet itself (an
+    # 自動篩選 on a plain range, after the table was converted to a range).
     sort_conditions: list[dict] = []
     filter_conditions: list[dict] = []
     with zipfile.ZipFile(xlsx_path) as zf:
-        for name in zf.namelist():
-            if name.startswith("xl/tables/") and name.endswith(".xml"):
-                root = ET.fromstring(zf.read(name))
-                if root.attrib.get("name") == "表格2" or "個人平均" in ET.tostring(root, encoding="unicode"):
-                    sort_desc = root.find(f".//{M}sortCondition") is not None
-                    cf = root.find(f".//{M}customFilter")
-                    filter_gt70 = cf is not None and cf.attrib.get("operator") == "greaterThan"
-                    sort_conditions = [
-                        {"ref": sc.attrib.get("ref"), "descending": sc.attrib.get("descending") == "1"}
-                        for sc in root.iter(f"{M}sortCondition")
-                    ]
-                    filter_conditions = [
-                        {
-                            "col_id": fc.attrib.get("colId"),
-                            "operator": f.attrib.get("operator", "equal"),
-                            "val": f.attrib.get("val"),
-                        }
-                        for fc in root.iter(f"{M}filterColumn")
-                        for f in fc.iter(f"{M}customFilter")
-                    ]
-                    # a ticked value list (<filters>) is not a 數字篩選 (rubric 2.4)
-                    filter_conditions += [
-                        {"col_id": fc.attrib.get("colId"), "operator": "values", "val": None}
-                        for fc in root.iter(f"{M}filterColumn")
-                        if fc.find(f"{M}filters") is not None
-                    ]
+        part = sheet_parts(zf).get(sheet_name)
+        if part:
+            roots = [ET.fromstring(zf.read(r["Target"])) for r in _read_rels(zf, part)
+                     if r["Type"].endswith("/table")]
+            roots.append(ET.fromstring(zf.read(part)))
+            for root in roots:
+                sorts, filters = _sort_and_filter(root)
+                sort_conditions += sorts
+                filter_conditions += filters
+    sort_desc = bool(sort_conditions)
+    filter_gt70 = any(f["operator"] == "greaterThan" for f in filter_conditions)
     hidden_rows = [r for r in range(1, ws.max_row + 1) if ws.row_dimensions[r].hidden]
     # rows left after the filter: students + 班平均 (rubric 2.4 expects 8 + 1 = 9)
     visible_data_rows = sum(1 for r in range(3, (avg_row or 16) + 1) if not ws.row_dimensions[r].hidden)
@@ -567,7 +586,7 @@ def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES, wb_va
 
 
 def raw_data_unchanged(wb_sub, wb_q, sheet_name: str, sub_sheet_name: str | None = None) -> dict:
-    """Compare column A (A2:A7) and row 2 (A2:E2) with the question file.
+    """Compare column A (車輛銷售 A2:A6, 武將能力 A2:A7) and row 2 (A2:E2) with the question file.
     Leading/trailing whitespace is ignored: the question's D2 「程遠志」 carries a
     trailing Tab, and deleting it is not a change (rubric 4.1). A cell that is
     empty in the question must stay empty.

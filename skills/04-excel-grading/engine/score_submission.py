@@ -211,8 +211,8 @@ def _score_grades(b: _Builder, g: dict | None, sheet_problem: str | None):
                      else "檔案沒有計算結果，無法確認G3:G15是否由大到小排序，請人工確認")
 
     filters = g.get("filter_conditions") or []
-    # 數字篩選 on 個人平均 (table column G = colId 6); > 70 and >= 70 both count
-    gt70 = [f for f in filters if f.get("col_id") == "6" and _num_eq(f.get("val"), 70)
+    # 數字篩選 on 個人平均 (column G); > 70 and >= 70 both count
+    gt70 = [f for f in filters if f.get("column") == "G" and _num_eq(f.get("val"), 70)
             and f.get("operator") in ("greaterThan", "greaterThanOrEqual")]
     visible = g.get("visible_data_rows")
     filter_ok = bool(gt70) and visible == 9
@@ -222,7 +222,7 @@ def _score_grades(b: _Builder, g: dict | None, sheet_problem: str | None):
                        else f"篩選條件為個人平均 {op}，但最後留下 {visible} 列（應為8位學生加班平均共9列）")
     elif any(f.get("operator") == "values" for f in filters):
         filter_note = "個人平均是勾選數值清單篩選，不是「數字篩選 > 70」"
-    elif any(f.get("col_id") != "6" for f in filters):
+    elif any(f.get("column") != "G" for f in filters):
         filter_note = "篩選條件設在個人平均以外的欄位"
     elif filters:
         filter_note = f"篩選條件為 {filters}"
