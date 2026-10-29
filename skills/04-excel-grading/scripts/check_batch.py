@@ -16,7 +16,12 @@ as init_batch.py):
                                 has data; shows its version and the 修改日
                                 stored inside the workbook
   5. 02_work/Excel|Word|PPT     all empty
-  6. 03_results/                holds only the templates from assets/03_results
+  6. 03_results/                holds the templates from assets/03_results; this
+                                batch's <課程>_<Excel|Word|PPT>_評分結果<梯次>_
+                                <yyyymmdd_HHMMSS>.xlsx and <課程>_三科_學員檔案與
+                                成績計算<梯次>_<yyyymmdd_HHMMSS>.xlsx may also be
+                                there at any time (grading never removes them);
+                                anything else fails, Excel lock files (~$) are listed
 Only files named for this batch are read; temp_* templates are skipped.
 Each result is printed as soon as it is known. Exit code 0 = all passed.
 
@@ -193,20 +198,39 @@ def check_work(dest: Path, rep: Report):
             rep.ok(f"02_work/{sub} 是空的")
 
 
-def check_results(dest: Path, rep: Report):
-    section("6. 03_results（只能有樣板）")
+def check_results(dest: Path, course: str, batch: str, rep: Report):
+    """Templates must all be there. This batch's single-subject results
+    (<課程>_<Excel|Word|PPT>_評分結果<梯次>_<yyyymmdd_HHMMSS>.xlsx) and 三科
+    summaries (<課程>_三科_學員檔案與成績計算<梯次>_<yyyymmdd_HHMMSS>.xlsx) may
+    exist at any time: grading one subject never removes another's. Anything
+    else fails; Excel lock files (~$) are only listed."""
+    section("6. 03_results（樣板＋各科單科評分結果＋三科彙總）")
     expected = {p.name for p in (ASSETS / "03_results").iterdir() if p.is_file()}
     folder = dest / "03_results"
     if not folder.is_dir():
         rep.fail(f"找不到資料夾 {folder}")
         return
+    stamp = rf"{re.escape(batch)}_\d{{8}}_\d{{6}}\.xlsx"
+    result_re = re.compile(rf"{re.escape(course)}_(?:{'|'.join(WORK_SUBDIRS)})_評分結果{stamp}")
+    report_re = re.compile(rf"{re.escape(course)}_三科_學員檔案與成績計算{stamp}")
     actual = {p.name for p in folder.iterdir()}
-    for name in sorted(expected - actual):
+    locks = sorted(n for n in actual if n.startswith("~$"))
+    results = sorted(n for n in actual - expected if result_re.fullmatch(n))
+    reports = sorted(n for n in actual - expected if report_re.fullmatch(n))
+    others = sorted(actual - expected - set(results) - set(reports) - set(locks))
+    missing = sorted(expected - actual)
+    for name in missing:
         rep.fail(f"缺少 {name}")
-    for name in sorted(actual - expected):
+    if not missing:
+        rep.ok(f"樣板 {len(expected)} 份都在：{', '.join(sorted(expected))}")
+    if results:
+        rep.ok(f"單科評分結果 {len(results)} 份（允許存在，不會被刪除）：{', '.join(results)}")
+    if reports:
+        rep.ok(f"三科彙總 {len(reports)} 份（允許存在，不會被刪除）：{', '.join(reports)}")
+    for name in locks:
+        rep.info(f"Excel 開啟中的暫存檔（略過）：{name}")
+    for name in others:
         rep.fail(f"多出不該有的項目：{name}")
-    if actual == expected:
-        rep.ok(f"只有 {len(expected)} 份樣板：{', '.join(sorted(expected))}")
 
 
 def main():
@@ -237,8 +261,9 @@ def main():
     check_templates(dest, rep)
     #--5. 02_work/ 下方三個資料夾（Excel／Word／PPT）必須全部淨空
     check_work(dest, rep)
-    #--6. 03_results/ 只能有 temp_S06_三科_學員檔案與成績計算yyyymm_v1.xlsx、temp_S06_單科_評分結果yyyymm_v1.xlsx 兩份
-    check_results(dest, rep)
+    #--6. 03_results/ 要有 temp_S06_三科_學員檔案與成績計算yyyymm_v1.xlsx、temp_S06_單科_評分結果yyyymm_v1.xlsx 兩份樣板；
+    #     S06_Excel｜Word｜PPT_評分結果、S06_三科_學員檔案與成績計算（yyyymm_yyyymmdd_HHMMSS.xlsx）隨時可以存在（評其他科時不可刪除），其餘檔案不可有
+    check_results(dest, course, args.batch, rep)
 
     print(f"\n{'全部通過' if not rep.failed else f'有 {rep.failed} 項未通過'}", flush=True)
     sys.exit(1 if rep.failed else 0)

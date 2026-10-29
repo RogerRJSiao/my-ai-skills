@@ -49,6 +49,8 @@ S06_<yyyymm>/
 ├─ 01_template/         評閱標準、題目、答案（init_batch.py 從 assets 複製）
 ├─ 02_work/             Excel／Word／PPT 評閱工作區，評分前必須淨空
 └─ 03_results/          單科評分結果、學員檔案與成績（temp_ 開頭的是樣板，不要刪）
+                        S06_Excel｜Word｜PPT_評分結果、S06_三科_學員檔案與成績計算 隨時可以存在；
+                        評閱任何一科或重跑三科彙總時都不可刪除已有的結果檔
 ```
 
 工具都在本 skill 資料夾內，只需要 Python 3.11+ 和 openpyxl：
@@ -56,7 +58,7 @@ S06_<yyyymm>/
 | 工具 | 用途 |
 |---|---|
 | `python scripts/init_batch.py --batch <yyyymm> [--dry-run]` | 建立梯次資料夾並複製樣板；已存在的檔案一律不覆寫 |
-| `python scripts/check_batch.py --batch <yyyymm>` | 評分前檢查六項：清單、名冊有資料、submissions 有資料夾、01_template 三份檔案（顯示版本與修改日；檔名要和本 skill `assets/01_template/` 的完全相同，目前是 `_v1`）、02_work 淨空、03_results 只有樣板。唯讀 |
+| `python scripts/check_batch.py --batch <yyyymm>` | 評分前檢查六項：清單、名冊有資料、submissions 有資料夾、01_template 三份檔案（顯示版本與修改日；檔名要和本 skill `assets/01_template/` 的完全相同，目前是 `_v1`）、02_work 淨空、03_results 有兩份樣板且沒有其他檔案（本梯次的 `S06_Excel｜Word｜PPT_評分結果<yyyymm>_<yyyymmdd_HHMMSS>.xlsx` 與 `S06_三科_學員檔案與成績計算<yyyymm>_<yyyymmdd_HHMMSS>.xlsx` 允許存在、Excel 暫存檔 `~$` 只列出）。唯讀 |
 | `python scripts/copy_to_work.py --batch <yyyymm> [--type all\|xlsx\|docx\|pptx] [--dry-run]` | 預設三種檔案都處理（`--type` 可只選一種），把合規的檔案複製到 02_work/Excel｜Word｜PPT：路徑是 `submissions/<單位-工號-姓名>/<單位-工號-姓名>.<副檔名>`，資料夾與檔名的單位-工號-姓名一致，且與 00_input/roster 學員名冊中的一列完全相同（含大小寫，見下方「學員身分比對規則」）；其餘列出略過原因，02_work 已有的不合規檔案只提醒、不刪除。不解壓縮 zip／7z／rar，不覆寫 02_work 已有的檔案 |
 | `python scripts/build_all_report.py --batch <yyyymm>` | 三科單科評分都完成後執行：複製 03_results 的 `temp_<課程>_三科_學員檔案與成績計算yyyymm_v1.xlsx` 成 `<課程>_三科_學員檔案與成績計算<梯次>_<yyyymmdd_HHMMSS>.xlsx`；活頁 manifest 依原始檔案清單填入每個檔案與歸檔／命名／重複異常（歸檔異常與 copy_to_work.py 同規則：資料夾的單位-工號-姓名須與名冊一列完全相同（含大小寫）、檔名須與資料夾一致，見下方「學員身分比對規則」）；活頁 score 依學員名冊順序填入學員，並把各科 `<課程>_<Excel\|Word\|PPT>_評分結果<梯次>_<yyyymmdd_HHMMSS>.xlsx`「評分結果表」的分數加總填入 Excel原始／Word原始／PPT原始（以**工號＋姓名**比對，共用工號的學生也能各自對應；同一組工號＋姓名在單科檔出現多次時採用第一筆並提醒；缺檔的科目留空白；單科檔沒評到分的學員以 0 分計，視為歸檔異常）；歸檔異常、命名異常（含未繳交）的科目，原始與 Excel／Word／PPT 欄都填 0，其餘 Excel／Word／PPT 為原始分數（上限 100）；備註依科目寫出異常與封頂原因。總分、是否合格不填。不需要 MCP |
 | `python engine/extract_submission.py <梯次>/02_work/Excel/<學生檔案> --question <題目檔>` | 輸出單一作答檔的客觀事實（JSON），學生檔案一律取自 02_work，見第2步 |
@@ -189,7 +191,7 @@ append 完後，記得把活頁2所有列（含原本就有的）的 SUMIFS 公�
   `total_errors: 0`。
 - 用 openpyxl 以 `data_only=True` 讀回結果，跟自己算的分數/合格判定核對一次
   再交付，避免公式範圍寫錯導致加總對不上。
-- 有梯次資料夾時存到梯次的 `03_results/`（`build_all_report.py` 從這裡讀）；在 claude.ai
+- 有梯次資料夾時存到梯次的 `03_results/`（`build_all_report.py` 從這裡讀）。每次都存成新檔（檔名帶時間），**不可刪除或覆寫 03_results 裡已有的 `S06_*_評分結果` 檔**，包括其他科（Word、PPT）與本科先前的結果；`build_all_report.py` 每科會自動取最新的一份。在 claude.ai
   上則存到 `/mnt/user-data/outputs/`，用 `present_files` 交付。並在對話中用
   條列式簡短說明每位學生的總分、合格與否、以及扣分主因（不用整份 12欄 x
   18列的明細貼在對話裡，那些都在檔案裡了）。
