@@ -22,3 +22,6 @@ manifest_source_template = "assets/00_input/manifest_source/temp_S06_三科_原�
 roster_template = "assets/00_input/roster/temp_S06_三科_學員名冊yyyymm_v1.xlsx"
 result_template = "assets/03_results/temp_S06_單科_評分結果yyyymm_v1.xlsx"
 all_report_template = "assets/03_results/temp_S06_三科_學員檔案與成績計算yyyymm_v1.xlsx"   # manifest + score 彙總
+
+[publish]                    # tools/build_skill.py 打包後的預設複製目的地（另一個做版本管理的 git repo）
+copy_to = 'D:\【git_rjsiao】\git_skill\s06_evaluation\excel_eval'

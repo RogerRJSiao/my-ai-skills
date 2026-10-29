@@ -49,7 +49,12 @@ my-ai-skills/
 
 1. 進入任一 Skill 資料夾，閱讀該資料夾的 `README.md`
 2. 依需求選擇使用方式：
-   - **Claude.ai**：用 `python tools/build_skill.py <編號>`（例如 `04`）打包成 `dist/<name>.skill` 後上傳（Settings → Features → Skills）
+   - **Claude.ai**：用 `python tools/build_skill.py <編號>`（例如 `04`）打包成 `dist/<name>.skill` 後上傳（Settings → Features → Skills）。
+     打包後也會把 skill 檔案複製到另一個做版本管理的 git repo：預設目的地寫在該 skill 的
+     `skill.toml` `[publish] copy_to`（例如 04 是 `D:\【git_rjsiao】\git_skill\s06_evaluation\excel_eval`），
+     可用 `--copy-to <資料夾>` 或 `tools/local_config.json`（本機設定，不進版控，
+     `{"copy_to": {"<skill 資料夾名>": "<目的地>"}}`）改掉；目的地在這台機器上不存在（例如 CI）時只打包，
+     `--no-copy` 也只打包
    - **Claude Code**：將資料夾複製到 `~/.claude/skills/` 或專案的 `.claude/skills/`
    - **其他 AI**：把 `SKILL.md` 全文貼給 AI，並附上指令「請依照此 Skill 執行」
 3. 若該 Skill 含 `requirements.txt`（01、04），先執行 `pip install -r requirements.txt`

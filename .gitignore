@@ -33,6 +33,7 @@ secrets.json
 
 # ── 機器本機路徑設定（因人而異，不納入版控）──
 skills/**/scripts/local_config.json
+tools/local_config.json
 
 # ── sample-data 內的 PDF（避免上傳銀行資料）──
 skills/**/sample-data/*.pdf

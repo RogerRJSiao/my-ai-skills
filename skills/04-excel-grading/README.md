@@ -16,6 +16,11 @@
 
 1. 用 repo 根目錄的 `python tools/build_skill.py 04 --name excel_grading_v1` 打包成
    `dist/excel_grading_v1.skill`，或將整個 repo clone 下來，把此資料夾當作 skill 目錄使用。
+   打包後預設也會把本資料夾的檔案（排除 `.venv`、`__pycache__`、`local_config.json`、02_work
+   作業檔，保留 `.gitignore`）複製到 `skill.toml` `[publish] copy_to` 指定的
+   `D:\【git_rjsiao】\git_skill\s06_evaluation\excel_eval\`，再到那個 repo commit。只覆寫有變動的
+   檔案、不刪除目的地的檔案；那個資料夾在這台機器上不存在時只打包。`--no-copy` 只打包，
+   `--copy-to <資料夾>` 改複製到別處。
 2. 在 Claude 中安裝（Save skill）。
 3. 上傳一份或多份「部門代號-工號-姓名.xlsx」學生作答檔，並提到評分/批改
    「S06」或「Excel實作」，會自動觸發此 skill。
