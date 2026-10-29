@@ -48,12 +48,18 @@ S06_<yyyymm>/
 | 工具 | 用途 |
 |---|---|
 | `python scripts/init_batch.py --batch <yyyymm> [--dry-run]` | 建立梯次資料夾並複製樣板；已存在的檔案一律不覆寫 |
-| `python scripts/check_batch.py --batch <yyyymm>` | 評分前檢查六項：清單、名冊有資料、submissions 有資料夾、01_template 三份檔案（顯示版本與修改日）、02_work 淨空、03_results 只有樣板。唯讀 |
+| `python scripts/check_batch.py --batch <yyyymm>` | 評分前檢查六項：清單、名冊有資料、submissions 有資料夾、01_template 三份檔案（顯示版本與修改日；檔名要和本 skill `assets/01_template/` 的完全相同，目前是 `_v1`）、02_work 淨空、03_results 只有樣板。唯讀 |
 | `python scripts/copy_to_work.py --batch <yyyymm> [--type all\|xlsx\|docx\|pptx] [--dry-run]` | 預設三種檔案都處理（`--type` 可只選一種），把合規的檔案複製到 02_work/Excel｜Word｜PPT：路徑是 `submissions/<單位-工號-姓名>/<單位-工號-姓名>.<副檔名>`，資料夾與檔名的單位-工號-姓名一致，且是 00_input/roster 學員名冊中的一列（單位不分大小寫）；其餘列出略過原因，02_work 已有的不合規檔案只提醒、不刪除。不解壓縮 zip／7z／rar，不覆寫 02_work 已有的檔案 |
-| `python scripts/build_all_report.py --batch <yyyymm>` | 三科單科評分都完成後執行：複製 03_results 的 `temp_<課程>_三科_學員檔案與成績計算yyyymm_v1.xlsx` 成 `<課程>_三科_學員檔案與成績計算<梯次>_<yyyymmdd_HHMMSS>.xlsx`；活頁 manifest 依原始檔案清單填入每個檔案與歸檔／命名／重複異常（歸檔異常與 copy_to_work.py 同規則：資料夾的單位-工號-姓名須是名冊一列、檔名須與資料夾一致）；活頁 score 依學員名冊順序填入學員，並把各科 `<課程>_<Excel\|Word\|PPT>_評分結果<梯次>_<yyyymmdd_HHMMSS>.xlsx`「評分結果表」的分數加總填入 Excel原始／Word原始／PPT原始（缺檔的科目留空白；單科檔沒評到分的學員以 0 分計，視為歸檔異常）；歸檔異常、命名異常（含未繳交）的科目，原始與 Excel／Word／PPT 欄都填 0，其餘 Excel／Word／PPT 為原始分數（上限 100）；備註依科目寫出異常與封頂原因。總分、是否合格不填。不需要 MCP |
+| `python scripts/build_all_report.py --batch <yyyymm>` | 三科單科評分都完成後執行：複製 03_results 的 `temp_<課程>_三科_學員檔案與成績計算yyyymm_v1.xlsx` 成 `<課程>_三科_學員檔案與成績計算<梯次>_<yyyymmdd_HHMMSS>.xlsx`；活頁 manifest 依原始檔案清單填入每個檔案與歸檔／命名／重複異常（歸檔異常與 copy_to_work.py 同規則：資料夾的單位-工號-姓名須是名冊一列、檔名須與資料夾一致）；活頁 score 依學員名冊順序填入學員，並把各科 `<課程>_<Excel\|Word\|PPT>_評分結果<梯次>_<yyyymmdd_HHMMSS>.xlsx`「評分結果表」的分數加總填入 Excel原始／Word原始／PPT原始（以**工號＋姓名**比對，共用工號的學生也能各自對應；同一組工號＋姓名在單科檔出現多次時採用第一筆並提醒；缺檔的科目留空白；單科檔沒評到分的學員以 0 分計，視為歸檔異常）；歸檔異常、命名異常（含未繳交）的科目，原始與 Excel／Word／PPT 欄都填 0，其餘 Excel／Word／PPT 為原始分數（上限 100）；備註依科目寫出異常與封頂原因。總分、是否合格不填。不需要 MCP |
 | `python engine/extract_submission.py <梯次>/02_work/Excel/<學生檔案> --question <題目檔>` | 輸出單一作答檔的客觀事實（JSON），學生檔案一律取自 02_work，見第2步 |
 
-梯次的 01_template 有多個版本（_v1、_v2）時，一律取版本號最大的。
+梯次的 01_template 有多個版本（_v1、_v2）時，手動評分一律取版本號最大的。
+要注意兩個工具不會跟著換版本：
+- `check_batch.py` 只認本 skill `assets/01_template/` 的檔名，梯次只放新版本會報缺少舊版本。
+- MCP 的 `gi_grade_submission` 固定用 `skill.toml` `[assets]` 指定的題目檔（本 skill
+  assets 裡的那份），不讀梯次的 01_template。
+
+出新版本時，要同步更新 `assets/01_template/` 和 `skill.toml`。
 
 ## 若環境有 kd-grading-internal 的 `gi_*` tools
 
@@ -63,7 +69,8 @@ S06_<yyyymm>/
 
 - `gi_get_rubric`：核對配分。
 - `gi_list_submissions`：解析檔名；`folder` 指向梯次的 `02_work/Excel`（例如 `S06_202609/02_work/Excel`）。
-- `gi_grade_submission`：依 `references/scoring_checks.md` 計分，並回傳 `needs_review` 項目。
+- `gi_grade_submission`：依 `references/scoring_checks.md` 計分，並回傳 `needs_review` 項目
+  （原始資料比對用 `skill.toml` 指定的題目檔，見上方版本說明）。
 - `gi_write_results`：寫入單科評分結果活頁簿；帶 `batch`（例如 `202612`）時直接存到梯次的 `03_results/`，
   找不到梯次資料夾才存到 server 的 output 資料夾。
 
@@ -116,10 +123,10 @@ S06_<yyyymm>/
    並用一兩句話寫出「評閱結果說明」（未完成的欠項，或已完成的加分項——
    對照原本的評分標準文字，講清楚具體原因，不要只寫「正確」兩個字）。
 3. 特別注意這些「連坐」規則，先檢查、可以省掉後面逐項檢查的力氣：
-   - 整個檔案沒有以【薪資】資料為來源的樞紐表（樞紐表可放在其他活頁，但要
-     排除【考題】活頁本身的範例）→ 1.1~1.5 全部0分。
-   - 車輛銷售／武將能力的 A欄或第2列原始資料被更動 → 對應大題(3.x 或 4.x)
-     全部0分，不論圖表其他設定是否正確。
+   - 整個檔案沒有以【薪資】A1:J13 為來源的樞紐表（樞紐表可放在其他活頁，但要
+     排除【考題】活頁本身的範例；來源範圍不是 A1:J13 也不算）→ 1.1~1.5 全部0分。
+   - 車輛銷售／武將能力的第A欄（A2:A7）或第2列（A2:E2）原始資料被更動 → 對應
+     大題(3.x 或 4.x) 全部0分，不論圖表其他設定是否正確。
    - 圖表不是動態的，或類型不對（考題3只限長條圖／直條圖／直方圖，考題4只限
      雷達圖）→ 對應大題全部0分。
 4. 完成比例 = 得分 / 該小項配分（含額外加分小項則除以額外加分上限），存成
@@ -166,6 +173,16 @@ append 完後，記得把活頁2所有列（含原本就有的）的 SUMIFS 公�
 - 3.4「運算列表資料標籤」是否為圖表下方的「資料表(Data Table)」功能，
   `engine/extract_submission.py` 會回報 `has_data_table`；遇到 `has_data_labels: false`
   但 `has_data_table: true` 時，打開 chart XML（`xl/charts/chartN.xml`）人工確認一次。
+- 其他會標成 `needs_review` 的情況也要逐一確認後再定分：
+  - 1.x 樞紐表來源解析不出是哪個活頁與範圍。
+  - 1.4 樞紐輸出區找不到數值格。
+  - 2.1 凍結窗格位置不常見。
+  - 2.4 檔案沒有計算結果，又沒有個人平均由大到小的排序條件。
+  - 3.1／4.1 沒有提供題目檔，無法檢查原始資料。
+  - 3.x【車輛銷售】只有直方圖等新式圖表。
+  - 4.3 雷達圖設了 marker 但沒指定標記符號。
+
+  細節見 `references/scoring_checks.md`。
 - 如果評閱標準表本身跟這次使用者提供的版本配分不同（例如日後調整），以
   使用者這次提供的檔案為準，並在回覆中提醒使用者配分已更新。
 - 檔名解析不出部門代號/工號/姓名，或一個檔案裡找不到預期的四個工作表

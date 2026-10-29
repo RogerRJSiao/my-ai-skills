@@ -11,7 +11,8 @@ build_all_report.py — build the batch's 三科 學員檔案與成績計算 wor
      (學員id, 姓名, 工號, 單位(來自名冊))
   3. fills Excel原始 / Word原始 / PPT原始 with 分數加總 of each subject's
      03_results/<課程>_<Excel|Word|PPT>_評分結果<梯次>_<yyyymmdd_HHMMSS>.xlsx
-     (sheet「評分結果表」, matched by 工號; the newest file per subject).
+     (sheet「評分結果表」, matched by 工號 + 姓名, since two students can
+     share a 工號; the newest file per subject).
      A missing subject file leaves that column blank; a student the subject
      file does not score gets 原始 0 as 歸檔異常, and so does any student whose
      file of that subject has 歸檔異常 or 命名異常 (原始 and the capped column).
@@ -34,8 +35,8 @@ all_report rules):
   備註                「<科目>: <notes>」joined by「；」: 歸檔異常（未繳交）, 歸檔異常,
                       命名異常, 重複異常(<群組>), 多個<副檔名>檔, 單科超過100分以100分計,
                       歸檔異常（評分結果檔沒有此學員）
-  Files are assigned to a student by the folder's 工號 first, then the file
-  name's 工號. 總分 / 是否合格 are left as in the template.
+  Files are assigned to a student by the folder's 工號 + 姓名 first, then the
+  file name's 工號 + 姓名. 總分 / 是否合格 are left as in the template.
 Only the template copy is written; inputs are only read.
 
 Helpers raise ValueError; main() turns it into the exit message.
@@ -143,9 +144,9 @@ def norm_path(key: str) -> str:
 
 
 def build_manifest(listing: Path, submissions: Path, course: str, roster: list[tuple]):
-    """(sheet rows, owner 工號 per row, (檔名, local copy or None) per row).
-    The owner is the folder's 工號 when the folder is 單位-6碼工號-姓名,
-    otherwise the file name's 工號."""
+    """(sheet rows, owner (工號, 姓名) per row, (檔名, local copy or None) per row).
+    The owner is the folder's 工號 + 姓名 when the folder is 單位-6碼工號-姓名,
+    otherwise the file name's 工號 + 姓名."""
     m = re.search(r"(\d{8})_(\d{2})(\d{2})(\d{2})", listing.name)
     cloud_at = f"{m.group(1)} {m.group(2)}:{m.group(3)}:{m.group(4)}" if m else None
     review_at = dt.datetime.now().strftime(TIME_FMT)
@@ -179,7 +180,8 @@ def build_manifest(listing: Path, submissions: Path, course: str, roster: list[t
         rows.append([i, cloud_path, "歸檔異常" if archive else None, name, emp_id, unit,
                      "命名異常" if naming else None, ext, sha, size, None, cloud_at, review_at])
         keys.append(((ext or "").lower(), sha, size) if sha else None)
-        owners.append(folder.split("-")[1] if folder and FOLDER_RE.fullmatch(folder) else emp_id)
+        owners.append(tuple(folder.split("-")[1:3]) if folder and FOLDER_RE.fullmatch(folder)
+                      else (emp_id, name))
         files.append((filename, local))
 
     groups: dict[tuple, list[int]] = {}
@@ -215,11 +217,11 @@ def pick_file(files: list[list]) -> list:
     return sorted(files, key=lambda r: (bool(r[2] or r[6]), r[0]))[0]
 
 
-def file_status(manifest: list[list], owners: list, emp_id: str, subject: str):
-    """(zero, notes) for one student and subject, from the manifest files
-    assigned to the student. zero=True for 歸檔異常 / 命名異常 / 未繳交."""
+def file_status(manifest: list[list], owners: list, student: tuple[str, str], subject: str):
+    """(zero, notes) for one student (工號, 姓名) and subject, from the manifest
+    files assigned to the student. zero=True for 歸檔異常 / 命名異常 / 未繳交."""
     ext = EXT_BY_SUBJECT[subject]
-    files = [r for r, o in zip(manifest, owners) if o == emp_id and (r[7] or "").lower() == ext]
+    files = [r for r, o in zip(manifest, owners) if o == student and (r[7] or "").lower() == ext]
     if not files:
         return True, ["歸檔異常（未繳交）"]
     f = pick_file(files)
@@ -271,7 +273,7 @@ def eval_sum_formula(formula: str, wb, ws) -> float | None:
 
 
 def subject_scores(results: Path, course: str, batch: str, subject: str):
-    """({工號: 分數加總}, file used or None, warnings)."""
+    """({(工號, 姓名): 分數加總}, file used or None, warnings)."""
     pat = rf"{re.escape(course)}_{subject}_評分結果{re.escape(batch)}_\d{{8}}_\d{{6}}\.xlsx"
     files = sorted(p for p in results.iterdir() if p.is_file() and re.fullmatch(pat, p.name))
     if not files:
@@ -286,9 +288,10 @@ def subject_scores(results: Path, course: str, batch: str, subject: str):
     ws_f, ws_v = wb_f["評分結果表"], wb_v["評分結果表"]
     header = [str(c.value).strip() if c.value is not None else "" for c in ws_f[1]]
     try:
-        c_id, c_score = header.index("工號") + 1, header.index("分數加總") + 1
+        c_id, c_name = header.index("工號") + 1, header.index("姓名") + 1
+        c_score = header.index("分數加總") + 1
     except ValueError:
-        return {}, path, [f"{path.name}「評分結果表」缺少「工號」或「分數加總」欄，此科留空白"]
+        return {}, path, [f"{path.name}「評分結果表」缺少「工號」「姓名」或「分數加總」欄，此科留空白"]
     out = {}
     for r in range(2, ws_f.max_row + 1):
         emp = ws_f.cell(row=r, column=c_id).value
@@ -302,11 +305,11 @@ def subject_scores(results: Path, course: str, batch: str, subject: str):
                 warns.append(f"第 {r} 列的分數加總公式無法計算：{raw}")
         elif val is None and isinstance(raw, (int, float)):
             val = raw
-        emp = str(emp).strip()
-        if emp in out:
-            warns.append(f"工號 {emp} 出現多次，採用第一筆")
+        key = (str(emp).strip(), str(ws_f.cell(row=r, column=c_name).value or "").strip())
+        if key in out:
+            warns.append(f"工號 {key[0]} 姓名 {key[1]} 出現多次，採用第一筆")
             continue
-        out[emp] = int(val) if isinstance(val, float) and val.is_integer() else val
+        out[key] = int(val) if isinstance(val, float) and val.is_integer() else val
     return out, path, warns
 
 
@@ -330,9 +333,9 @@ def fill_score_sheet(ws, roster: list[tuple], manifest: list[list], owners: list
         if path is None:
             continue
         for i, r in enumerate(roster, start=2):
-            emp = str(r[2]).strip()
-            v = scores.get(emp)
-            zero, notes = file_status(manifest, owners, emp, subject)
+            student = (str(r[2]).strip(), str(r[1]).strip())
+            v = scores.get(student)
+            zero, notes = file_status(manifest, owners, student, subject)
             #--沒評到分（評分結果檔沒有此學員）：視為歸檔異常，原始也以 0 計
             if v is None:
                 info["missing"].append(str(r[1]))

@@ -35,7 +35,7 @@
 ├── requirements.txt                               # Python 依賴（openpyxl）
 │
 ├── assets/                                        # 梯次資料夾的樣板（init_batch.py 複製到 <梯次>/）
-│   ├── 00_input/                                  # manifest_source、roster、submissions（空資料夾）
+│   ├── 00_input/                                  # manifest_source、roster（各有一份 temp_ 樣板）、submissions（空資料夾）
 │   ├── 01_template/
 │   │   ├── S06_excel_scoring_criteria_v1.xlsx     # 評閱標準（唯一評分依據）
 │   │   ├── S06_excel_question_v1.xlsx             # 原始題目檔（未作答，用來比對是否被更動）
@@ -93,4 +93,5 @@
 - 不會捏造未提供素材中的技術細節或分數，資訊不足（檔名解析不出來、缺少
   必要工作表等）時會主動詢問，不會憑空帶入預設值。
 - 圖表用「資料表(Data Table)」而非逐點資料標籤時（`has_data_table: true`），
-  3.4 會標成需人工確認，要開 chart XML 確認。
+  3.4 會標成需人工確認，要開 chart XML 確認。其他需人工確認的情況列在
+  `references/scoring_checks.md` 開頭。

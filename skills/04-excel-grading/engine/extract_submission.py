@@ -7,9 +7,12 @@ it, and it also runs on its own (only openpyxl needed):
 
 prints the facts as JSON. Notable keys:
 
-    chart_*:  chart_count, bar_dir, is_3d, radar_style, has_data_table
-    成績:     sort_conditions, filter_conditions, a1_merged_range, row_avg_uses_subtotal
-    pivot_薪資: host_sheet, location (the pivot may sit on a sheet other than 薪資)
+    chart_*:  chart_count, chart_types, bar_dir, is_3d, radar_style, has_data_table
+    成績:     sort_conditions, filter_conditions, a1_merged_range, row_avg_uses_subtotal,
+              g_values_descending, visible_data_rows, g16_cell
+    pivot_薪資: host_sheet, location (the pivot may sit on a sheet other than 薪資;
+              its source must be 薪資!A1:J13)
+    pivot_薪資_rejected: pivots whose source failed that check, with the reason
     成績 (2.2): a1_horizontal, a1_merge_and_center
     top level: sheet_names, ambiguous_sheets (sheet names may carry a prefix/suffix),
                chartex_count (Excel 2016+ charts such as 直方圖, not inspected)
@@ -45,11 +48,13 @@ SHEET_VEHICLE = "車輛銷售"
 SHEET_GENERAL = "武將能力"
 EXPECTED_SHEETS = (SHEET_SALARY, SHEET_GRADES, SHEET_VEHICLE, SHEET_GENERAL)
 
-# Raw-data cells compared against the original question file.
-RAW_DATA_CELLS = {
-    SHEET_VEHICLE: (["A3", "A4", "A5", "A6"], ["B2", "C2", "D2"]),
-    SHEET_GENERAL: (["A3", "A4", "A5", "A6", "A7"], ["B2", "C2", "D2", "E2"]),
-}
+# Raw-data cells compared against the original question file:
+# column A (A2:A7) and row 2 (A2:E2), rubric 3.1 / 4.1.
+_RAW_CELLS = (["A2", "A3", "A4", "A5", "A6", "A7"], ["B2", "C2", "D2", "E2"])
+RAW_DATA_CELLS = {SHEET_VEHICLE: _RAW_CELLS, SHEET_GENERAL: _RAW_CELLS}
+
+# The 薪資 data a qualifying pivot must use (rubric 1.1).
+SALARY_SOURCE_RANGE = "A1:J13"
 
 
 # ── workbook loading ─────────────────────────────────────────────────────
@@ -149,8 +154,8 @@ def _pivot_targets(zf: zipfile.ZipFile, sheet_part: str) -> list[str]:
     return [r["Target"] for r in _read_rels(zf, sheet_part) if r["Type"].endswith("/pivotTable")]
 
 
-def _table_sheets(zf: zipfile.ZipFile, parts: dict[str, str]) -> dict[str, str]:
-    """Map Excel table name (and displayName) -> the sheet it is defined on."""
+def _table_sheets(zf: zipfile.ZipFile, parts: dict[str, str]) -> dict[str, tuple[str, str]]:
+    """Map Excel table name (and displayName) -> (sheet it is defined on, its ref)."""
     out = {}
     for sheet, part in parts.items():
         for r in _read_rels(zf, part):
@@ -158,32 +163,69 @@ def _table_sheets(zf: zipfile.ZipFile, parts: dict[str, str]) -> dict[str, str]:
                 root = ET.fromstring(zf.read(r["Target"]))
                 for key in ("name", "displayName"):
                     if root.attrib.get(key):
-                        out[root.attrib[key]] = sheet
+                        out[root.attrib[key]] = (sheet, root.attrib.get("ref"))
     return out
 
 
-def find_salary_pivot(zf: zipfile.ZipFile, parts: dict[str, str], salary_sheet: str | None) -> dict | None:
-    """Facts for the student's 薪資 pivot table, or None.
+_SHEET_RANGE_RE = re.compile(r"'?(.+?)'?!\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)")
+
+
+def _defined_names(zf: zipfile.ZipFile) -> dict[str, tuple[str, str]]:
+    """Map workbook-level defined name -> (sheet, range without $)."""
+    out = {}
+    for dn in ET.fromstring(zf.read("xl/workbook.xml")).iter(f"{M}definedName"):
+        m = _SHEET_RANGE_RE.fullmatch((dn.text or "").strip())
+        if m and dn.attrib.get("localSheetId") is None:
+            out[dn.attrib.get("name")] = (m.group(1), f"{m.group(2)}{m.group(3)}:{m.group(4)}{m.group(5)}")
+    return out
+
+
+def _pivot_source(info: dict, tables: dict, names: dict) -> tuple[str | None, str | None, bool]:
+    """(sheet, range without $, is an Excel table) of a pivot's source; (None, None, False)
+    when it cannot be resolved."""
+    src = info["source_name_or_range"]
+    if info["_source_sheet"]:
+        return info["_source_sheet"], (src or "").replace("$", "") or None, False
+    if src in tables:
+        return (*tables[src], True)
+    if src in names:
+        return (*names[src], False)
+    return None, None, False
+
+
+def find_salary_pivot(zf: zipfile.ZipFile, parts: dict[str, str],
+                      salary_sheet: str | None) -> tuple[dict | None, list[dict]]:
+    """(facts for the student's 薪資 pivot table or None, rejected pivots).
 
     The pivot may sit on 【薪資】 or on another sheet (Excel puts a new pivot
-    on a new sheet by default), but its source must be the 【薪資】 data. The
+    on a new sheet by default), but its source must be 【薪資】!A1:J13. The
     sample on 【考題】 is skipped: it is hosted there and its cache reads an
-    external workbook, so it never counts (rubric 1.1)."""
+    external workbook, so it never counts (rubric 1.1). Pivots that are not
+    external but fail the source check are returned as `rejected`
+    ({host_sheet, source_sheet, source_range, reason}) for the 評閱結果說明."""
     if salary_sheet is None:
-        return None
-    tables = _table_sheets(zf, parts)
+        return None, []
+    tables, names = _table_sheets(zf, parts), _defined_names(zf)
     hosts = [salary_sheet] + [s for s in parts if s != salary_sheet and "考題" not in s]
+    rejected = []
     for host in hosts:
         for target in _pivot_targets(zf, parts[host]):
             info = pivot_info(zf, target)
             if info.pop("_external"):
                 continue
-            source = info.pop("_source_sheet") or tables.get(info["source_name_or_range"])
-            # an unresolvable source is accepted only for a pivot on 【薪資】 itself
-            if (source or (salary_sheet if host == salary_sheet else None)) != salary_sheet:
-                continue
-            return {**info, "host_sheet": host}
-    return None
+            sheet, rng, is_table = _pivot_source(info, tables, names)
+            info.pop("_source_sheet")
+            if sheet is None:
+                reason = "unresolved"
+            elif sheet != salary_sheet:
+                reason = "other_sheet"
+            elif rng != SALARY_SOURCE_RANGE:
+                reason = "wrong_range"
+            else:
+                return {**info, "source_is_named_table": is_table, "host_sheet": host}, rejected
+            rejected.append({"host_sheet": host, "source_sheet": sheet, "source_range": rng,
+                             "source_name_or_range": info["source_name_or_range"], "reason": reason})
+    return None, rejected
 
 
 def pivot_info(zf: zipfile.ZipFile, pivot_target: str) -> dict:
@@ -249,9 +291,6 @@ def pivot_info(zf: zipfile.ZipFile, pivot_target: str) -> dict:
     return {
         "pivot_target": pivot_target,
         "source_name_or_range": cache_source_name,
-        "source_is_named_table": bool(
-            cache_source_name and not any(ch in cache_source_name for ch in "$:")
-        ),
         "row_field_index": row_field_idx,
         "col_field_index": col_field_idx,
         "row_visible_labels": visible_labels(row_field_idx[0]) if row_field_idx else None,
@@ -312,15 +351,15 @@ def _single_chart_info(zf: zipfile.ZipFile, chart_target: str) -> dict:
         c_root.find(f".//{C}numLit") is not None or c_root.find(f".//{C}strLit") is not None
     ) and not is_dynamic
 
-    chart_type = None
-    for tag in ("barChart", "radarChart", "lineChart", "pieChart"):
-        if c_root.find(f".//{C}{tag}") is not None:
-            chart_type = tag
-            break
+    # every chart group in the plot area, e.g. ["barChart", "lineChart"] for a combo chart
+    plot_area = c_root.find(f".//{C}plotArea")
+    chart_types = [el.tag.split("}")[-1] for el in (plot_area if plot_area is not None else [])
+                   if el.tag.endswith("Chart")]
     # a 3-D clustered column chart counts as a 群組直條圖 (rubric 3.1)
-    is_3d = c_root.find(f".//{C}bar3DChart") is not None
-    if chart_type is None and is_3d:
-        chart_type = "barChart"
+    is_3d = "bar3DChart" in chart_types
+    normalized = ["barChart" if t == "bar3DChart" else t for t in chart_types]
+    chart_type = next((t for t in ("barChart", "radarChart") if t in normalized),
+                      normalized[0] if normalized else None)
 
     first_cat = c_root.find(f".//{C}ser/{C}cat")
     categories = _strcache_values(first_cat) if first_cat is not None else None
@@ -365,6 +404,7 @@ def _single_chart_info(zf: zipfile.ZipFile, chart_target: str) -> dict:
     return {
         "chart_target": chart_target,
         "chart_type": chart_type,
+        "chart_types": chart_types,
         "is_dynamic": is_dynamic,
         "literal_only": has_literal_only,
         "category_ref": cat_ref,
@@ -404,13 +444,27 @@ def chart_info(zf: zipfile.ZipFile, sheet_part: str, preferred_type: str | None 
 
 # ── 考題2 成績 ─────────────────────────────────────────────────────────────
 
-def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES) -> dict:
+_ROUNDED_AVERAGE_RE = re.compile(r"=\s*(?:(?:ROUND|ROUNDUP|ROUNDDOWN)\(.*,\s*0\s*\)|INT\(.*\))\s*")
+
+
+def shows_integer(cell) -> bool:
+    """True if the cell's result is kept to whole numbers (rubric 2.3): an
+    integer number format (0, #,##0, 0_) …) or ROUND(…, 0) / INT(…) around the formula."""
+    section = (cell.number_format or "").split(";")[0]
+    section = re.sub(r'"[^"]*"|\[[^\]]*\]|_.|\\.', "", section)   # literals, [colour], padding
+    if re.search(r"[0#]", section) and not re.search(r"[.%Ee/]", section):
+        return True
+    return isinstance(cell.value, str) and bool(_ROUNDED_AVERAGE_RE.fullmatch(cell.value.upper()))
+
+
+def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES, wb_values=None) -> dict:
+    """Facts for 考題2. `wb_values` is the workbook loaded with data_only=True;
+    it supplies the cached 個人平均 values for the sort check (rubric 2.4)."""
     ws = wb[sheet_name]
     merged = [str(r) for r in ws.merged_cells.ranges]
     a1_merged = next((m for m in merged if m.startswith("A1:")), None)
     a1_val = ws["A1"].value
     a1_horizontal = ws["A1"].alignment.horizontal
-    centered_across = a1_horizontal in ("center", "centerContinuous")
 
     avg_row = next(
         (r for r in range(1, ws.max_row + 1) if ws.cell(row=r, column=1).value == "班平均"),
@@ -422,22 +476,21 @@ def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES) -> di
 
     g_formulas_ok = all(is_average_formula(ws.cell(row=r, column=7)) for r in range(3, 16))
 
-    row_avg_formulas_ok = row_avg_integer_fmt = g_avg_row_value = None
+    row_avg_formulas_ok = row_avg_integer_fmt = None
     row_avg_uses_subtotal = False
     if avg_row:
         row_avg_formulas_ok = all(is_average_formula(ws.cell(row=avg_row, column=c)) for c in range(2, 7))
         row_avg_uses_subtotal = any(
             "SUBTOTAL(" in str(ws.cell(row=avg_row, column=c).value or "").upper() for c in range(2, 7)
         )
-        row_avg_integer_fmt = all(
-            ws.cell(row=avg_row, column=c).number_format in ("0", "0_)") for c in range(2, 7)
-        )
-        g_cell = ws.cell(row=avg_row, column=7)
-        g_avg_row_value = {"value": g_cell.value, "is_empty": g_cell.value in (None, "")}
+        row_avg_integer_fmt = all(shows_integer(ws.cell(row=avg_row, column=c)) for c in range(2, 7))
+    # rubric 2.6 names the single cell G16, wherever 班平均 ends up
+    g16 = ws["G16"]
+    g16_cell = {"value": g16.value, "is_empty": g16.value in (None, "")}
 
-    last_row = avg_row or 16
+    # rubric 2.5 names the fixed range A1:G16
     missing_border = []
-    for r in range(1, last_row + 1):
+    for r in range(1, 17):
         for col in range(1, 8):
             b = ws.cell(row=r, column=col).border
             if not (b.top.style or b.bottom.style or b.left.style or b.right.style):
@@ -475,43 +528,56 @@ def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES) -> di
                         if fc.find(f"{M}filters") is not None
                     ]
     hidden_rows = [r for r in range(1, ws.max_row + 1) if ws.row_dimensions[r].hidden]
+    # rows left after the filter: students + 班平均 (rubric 2.4 expects 8 + 1 = 9)
+    visible_data_rows = sum(1 for r in range(3, (avg_row or 16) + 1) if not ws.row_dimensions[r].hidden)
+
+    # rubric 2.4 checks the result: G3:G15 in descending order (cached values,
+    # only present when Excel saved the file)
+    g_values_descending = None
+    if wb_values is not None:
+        g_values = [wb_values[sheet_name].cell(row=r, column=7).value for r in range(3, 16)]
+        if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in g_values):
+            g_values_descending = all(a >= b for a, b in zip(g_values, g_values[1:]))
 
     return {
         "freeze_panes": ws.freeze_panes,
         "merged_ranges": merged,
         "a1_value": a1_val,
-        "a1_center_or_merged": bool(merged) or centered_across,
         "a1_merged_range": a1_merged,
         "a1_horizontal": a1_horizontal,
-        # 合併後置中 (rubric 2.2): A1:G1 merged and centred
-        "a1_merge_and_center": a1_merged == "A1:G1" and centered_across,
+        # 合併後置中 (rubric 2.2): A1:G1 merged and 水平置中 (跨欄置中 does not count)
+        "a1_merge_and_center": a1_merged == "A1:G1" and a1_horizontal == "center",
         "header_text_preserved": a1_val == "經濟甲班 期中考成績表",
         "avg_row_index": avg_row,
         "g3_g15_average_formulas_ok": g_formulas_ok,
         "row_avg_formulas_ok": row_avg_formulas_ok,
         "row_avg_integer_format": row_avg_integer_fmt,
         "row_avg_uses_subtotal": row_avg_uses_subtotal,
-        "g_avg_row_cell": g_avg_row_value,
+        "g16_cell": g16_cell,
         "missing_border_cells": missing_border,
         "borders_complete": len(missing_border) == 0,
         "sorted_descending": sort_desc,
+        "g_values_descending": g_values_descending,
         "filter_gt70_applied": filter_gt70,
         "hidden_rows": hidden_rows,
+        "visible_data_rows": visible_data_rows,
         "sort_conditions": sort_conditions,
         "filter_conditions": filter_conditions,
     }
 
 
 def raw_data_unchanged(wb_sub, wb_q, sheet_name: str, sub_sheet_name: str | None = None) -> dict:
-    """Compare A-column categories and row-2 headers with the question file.
+    """Compare column A (A2:A7) and row 2 (A2:E2) with the question file.
     Leading/trailing whitespace is ignored: the question's D2 「程遠志」 carries a
-    trailing Tab, and deleting it is not a change (rubric 4.1).
+    trailing Tab, and deleting it is not a change (rubric 4.1). A cell that is
+    empty in the question must stay empty.
     `sub_sheet_name` is the student's sheet name when it has a prefix/suffix."""
     col_range, row2_range = RAW_DATA_CELLS[sheet_name]
     ws_sub, ws_q = wb_sub[sub_sheet_name or sheet_name], wb_q[sheet_name]
 
     def norm(v):
-        return v.strip() if isinstance(v, str) else v
+        v = v.strip() if isinstance(v, str) else v
+        return None if v == "" else v
 
     diffs = []
     for coord in col_range + row2_range:
@@ -540,7 +606,7 @@ def inspect_submission(xlsx_path: str | Path, question_path: str | Path | None =
         out["sheet_names"] = names
         out["missing_sheets"] = [s for s in EXPECTED_SHEETS if s not in names and s not in ambiguous]
         out["ambiguous_sheets"] = ambiguous
-        out["pivot_薪資"] = find_salary_pivot(zf, parts, names.get(SHEET_SALARY))
+        out["pivot_薪資"], out["pivot_薪資_rejected"] = find_salary_pivot(zf, parts, names.get(SHEET_SALARY))
         out["chart_車輛銷售"] = (
             chart_info(zf, parts[names[SHEET_VEHICLE]], "barChart") if SHEET_VEHICLE in names else None
         )
@@ -551,16 +617,16 @@ def inspect_submission(xlsx_path: str | Path, question_path: str | Path | None =
             s: chartex_count(zf, parts[names[s]]) for s in (SHEET_VEHICLE, SHEET_GENERAL) if s in names
         }
 
-    wb =load_workbook(xlsx_path, data_only=False)
+    wb = load_workbook(xlsx_path, data_only=False)
+    wb_sub = load_workbook(xlsx_path, data_only=True)
     if out["pivot_薪資"]:
         pivot = out["pivot_薪資"]
         pivot["value_number_formats"] = pivot_output_number_format(wb, pivot["host_sheet"], pivot["location"])
     out["成績"] = (
-        grades_sheet_info(wb, xlsx_path, names[SHEET_GRADES]) if SHEET_GRADES in names else None
+        grades_sheet_info(wb, xlsx_path, names[SHEET_GRADES], wb_sub) if SHEET_GRADES in names else None
     )
 
     if question_path:
-        wb_sub = load_workbook(xlsx_path, data_only=True)
         wb_q = load_workbook(question_path, data_only=True)
         for sheet in (SHEET_VEHICLE, SHEET_GENERAL):
             out[f"{sheet}_raw_data_check"] = (
