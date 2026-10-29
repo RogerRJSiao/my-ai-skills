@@ -20,10 +20,94 @@
 3. 上傳一份或多份「部門代號-工號-姓名.xlsx」學生作答檔，並提到評分/批改
    「S06」或「Excel實作」，會自動觸發此 skill。
 
-在本機處理整個梯次時（Claude Code），流程是：
-`init_batch.py` → 放入原始檔案清單、學員名冊、submissions → `check_batch.py` →
-`copy_to_work.py` → 逐檔評分並寫入單科評分結果（存到梯次的 `03_results/`）→
-三科都評完後 `build_all_report.py`。各腳本的用法見 `SKILL.md`。
+在本機處理整個梯次時（Claude Code），流程見下一節「運作流程與產出檔案」；各腳本的
+參數見 `SKILL.md` 的工具表。
+
+## 運作流程與產出檔案
+
+梯次資料夾是 `<資料根目錄>/grading/training_internal/S06_<yyyymm>/`（資料根目錄依序取
+`--root`、`scripts/local_config.json` 的 `data_root`、預設 `D:\claude_data`），以下用
+`<梯次>` 代表。所有 scripts 都從 `skill.toml` 讀 `course_code`（S06）與 `domain`。
+
+```mermaid
+flowchart TD
+    assets[("assets/<br>樣板")]
+    s1["① scripts/init_batch.py"]
+    manual["人工放入<br>原始檔案清單 csv、學員名冊 xlsx、submissions/"]
+    s2["② scripts/check_batch.py<br>（唯讀）"]
+    s3["③ scripts/check_rubric.py"]
+    s4["④ scripts/copy_to_work.py"]
+    e1["⑤-1 engine/extract_submission.py"]
+    e2["⑤-2 engine/score_submission.py<br>＋ engine/extract_rubric.py"]
+    e3["⑤-3 engine/results.py"]
+    s6["⑥ scripts/build_all_report.py"]
+
+    f1[/"&lt;梯次&gt;/00_input、01_template、02_work、03_results<br>＋ 複製過去的樣板"/]
+    f3[/"02_work/rubric/<br>S06_excel_scoring_criteria_&lt;時間&gt;.md"/]
+    f4[/"02_work/Excel｜Word｜PPT/<br>&lt;單位-工號-姓名&gt;.&lt;副檔名&gt;"/]
+    j1(["事實 JSON（不存檔）"])
+    j2(["各小項得分（不存檔）"])
+    f5[/"03_results/<br>S06_Excel_評分結果&lt;yyyymm&gt;_&lt;時間&gt;.xlsx"/]
+    wp[/"03_results/<br>Word、PPT 單科結果<br>（各自的 skill 產出）"/]
+    f6[/"03_results/<br>S06_三科_學員檔案與成績計算&lt;yyyymm&gt;_&lt;時間&gt;.xlsx"/]
+
+    assets --> s1 --> f1 --> manual
+    manual --> s2
+    s2 --> s3 --> f3
+    s3 --> s4 --> f4
+    f4 --> e1 --> j1 --> e2 --> j2 --> e3 --> f5
+    f5 --> s6
+    wp --> s6
+    s6 --> f6
+```
+
+`<時間>` 一律是執行當下的 `yyyymmdd_HHMMSS`。
+
+| 步驟 | 程式 | 讀取 | 產出（寫入位置） |
+|---|---|---|---|
+| ① 建立梯次 | `scripts/init_batch.py --batch <yyyymm>` | `assets/` 整個目錄、`skill.toml` | 建立 `<梯次>/` 的 00_input（manifest_source、roster、submissions）、01_template、02_work（Excel、Word、PPT）、03_results，並把 `assets/` 的樣板複製到同名資料夾（評閱標準、題目、答案、`temp_` 開頭的清單／名冊／結果樣板）。已存在的檔案不覆寫，`.gitkeep` 不複製 |
+| （人工） | — | — | `00_input/manifest_source/S06_三科_原始檔案<yyyymm>[_<時間>].csv`、`00_input/roster/S06_三科_學員名冊<yyyymm>.xlsx`、`00_input/submissions/<單位-工號-姓名>/` 底下的作業檔 |
+| ② 評分前檢查 | `scripts/check_batch.py --batch <yyyymm>` | 上面三種輸入、`01_template/`、`02_work/`、`03_results/` | 無，只在終端機列出六項檢查結果（exit code 0＝全部通過） |
+| ③ 評閱標準一致性 | `scripts/check_rubric.py --batch <yyyymm>` | `<梯次>/01_template/` 最新版本的評閱標準、標準解答檔、題目檔；`references/scoring_checks.md`；`engine/` | `02_work/rubric/S06_excel_scoring_criteria_<時間>.md`（每次執行新增一份，不覆寫舊的；資料夾不存在會建立） |
+| ④ 複製合規作業 | `scripts/copy_to_work.py --batch <yyyymm>` | `00_input/submissions/`、學員名冊 | `02_work/Excel/`、`02_work/Word/`、`02_work/PPT/` 底下的 `<單位-工號-姓名>.<副檔名>`（只複製合規檔案；02_work 已有同名檔不覆寫；壓縮檔不解壓、只列出） |
+| ⑤-1 萃取事實 | `engine/extract_submission.py`（可直接執行，也被 engine 呼叫） | `02_work/Excel/<學生檔案>`、`01_template/` 的題目檔（`--question`） | 無檔案；直接執行時把 JSON 印到終端機，engine 呼叫時回傳 dict |
+| ⑤-2 計分 | `engine/score_submission.py`（用 `engine/extract_rubric.py` 的內建配分表） | ⑤-1 的事實 | 無檔案；回傳各小項得分、評閱結果說明、`needs_review`、warnings |
+| ⑤-3 寫結果 | `engine/results.py`（MCP 的 `gi_write_results` 呼叫） | 結果樣板 `temp_S06_單科_評分結果yyyymm_v1.xlsx`，或要追加的既有結果檔 | `03_results/S06_Excel_評分結果<yyyymm>_<時間>.xlsx`（活頁1 評分細項、活頁2 評分結果表；梯次資料夾不存在時存到 MCP server 的 output 資料夾）。純 skill 使用時由模型依 SKILL.md 第3、4步用 openpyxl 寫出同樣格式 |
+| ⑥ 三科彙總 | `scripts/build_all_report.py --batch <yyyymm>` | 原始檔案清單、學員名冊、`00_input/submissions/`（算 SHA256）、`03_results/` 的三科單科結果（每科取最新一份）、三科彙總樣板 | `03_results/S06_三科_學員檔案與成績計算<yyyymm>_<時間>.xlsx`（活頁 manifest、score）。輸入檔只讀 |
+
+engine 內部的呼叫關係（MCP server 透過 `engine/__init__.py` 的 `ENGINE` 使用）：
+
+```mermaid
+flowchart LR
+    t1["gi_inspect_submission"]
+    t2["gi_grade_submission"]
+    t3["gi_get_rubric"]
+    t4["gi_write_results"]
+    ins["extract_submission<br>.inspect_submission<br>（學生檔、題目檔）"]
+    sc["score_submission<br>.score_facts"]
+    rb["extract_rubric<br>.builtin_rubric_map<br>（配分、小項名稱）"]
+    rr["extract_rubric<br>.read_rubric_file<br>＋ compare_with_builtin"]
+    wr["results<br>.write_results"]
+    gr(["GradeResult"])
+    out[/"單科評分結果 xlsx"/]
+
+    t1 --> ins
+    t2 --> ins --> sc --> gr
+    rb --> sc
+    t3 --> rr
+    t4 -->|每位學生先評分| t2
+    t4 --> wr --> out
+    gr --> wr
+```
+
+MCP server 本身另外會寫稽核 log（`<output>/_audit/<server>.jsonl`），見 `mcp-server/README.md`。
+
+注意事項：
+- **02_work 評分前必須淨空**：`check_batch.py` 只檢查 `02_work/Excel｜Word｜PPT`；`02_work/rubric/`
+  的一致性報告不影響這項檢查。
+- **評閱標準以梯次 01_template 為準**：③ 比對梯次裡最新版本的評閱標準；MCP 的 ⑤ 用的是
+  `skill.toml` 指定、放在本 skill `assets/` 的那份，③ 會檢查兩者內容是否相同。
+- **三科彙總只讀單科結果**：⑥ 依「工號＋姓名」對應學生，單科結果超過 100 分在彙總時才封頂。
 
 ## 目錄結構
 
