@@ -32,7 +32,10 @@ description: Standard operating procedure for grading "S06" Excel實作 (pivot t
 **標準的優先順序**：評閱標準 xlsx（版本號最大的那份，或使用者這次提供的版本）
 ＞ `references/scoring_checks.md` ＞ `engine/` 的 py 程式。md 與 py 都是照 xlsx 寫的；
 發現三者不一致時，一律以 xlsx 為準，回頭修改 md 與 py，並在回覆中告訴使用者哪裡
-不一致，不要照程式或 md 的現況評分。
+不一致，不要照程式或 md 的現況評分。評閱標準換版、或改過 md／py 之後，先跑
+`python scripts/check_rubric.py --batch <yyyymm>`（以梯次 01_template 的評閱標準為準，見下方
+工具表）確認三者一致；它查不到評分標準文字的
+語意，這部分仍要人工對照 scoring_checks.md。
 
 ## 梯次資料夾與工具（scripts/、engine/）
 
@@ -57,6 +60,7 @@ S06_<yyyymm>/
 | `python scripts/copy_to_work.py --batch <yyyymm> [--type all\|xlsx\|docx\|pptx] [--dry-run]` | 預設三種檔案都處理（`--type` 可只選一種），把合規的檔案複製到 02_work/Excel｜Word｜PPT：路徑是 `submissions/<單位-工號-姓名>/<單位-工號-姓名>.<副檔名>`，資料夾與檔名的單位-工號-姓名一致，且是 00_input/roster 學員名冊中的一列（單位不分大小寫）；其餘列出略過原因，02_work 已有的不合規檔案只提醒、不刪除。不解壓縮 zip／7z／rar，不覆寫 02_work 已有的檔案 |
 | `python scripts/build_all_report.py --batch <yyyymm>` | 三科單科評分都完成後執行：複製 03_results 的 `temp_<課程>_三科_學員檔案與成績計算yyyymm_v1.xlsx` 成 `<課程>_三科_學員檔案與成績計算<梯次>_<yyyymmdd_HHMMSS>.xlsx`；活頁 manifest 依原始檔案清單填入每個檔案與歸檔／命名／重複異常（歸檔異常與 copy_to_work.py 同規則：資料夾的單位-工號-姓名須是名冊一列、檔名須與資料夾一致）；活頁 score 依學員名冊順序填入學員，並把各科 `<課程>_<Excel\|Word\|PPT>_評分結果<梯次>_<yyyymmdd_HHMMSS>.xlsx`「評分結果表」的分數加總填入 Excel原始／Word原始／PPT原始（以**工號＋姓名**比對，共用工號的學生也能各自對應；同一組工號＋姓名在單科檔出現多次時採用第一筆並提醒；缺檔的科目留空白；單科檔沒評到分的學員以 0 分計，視為歸檔異常）；歸檔異常、命名異常（含未繳交）的科目，原始與 Excel／Word／PPT 欄都填 0，其餘 Excel／Word／PPT 為原始分數（上限 100）；備註依科目寫出異常與封頂原因。總分、是否合格不填。不需要 MCP |
 | `python engine/extract_submission.py <梯次>/02_work/Excel/<學生檔案> --question <題目檔>` | 輸出單一作答檔的客觀事實（JSON），學生檔案一律取自 02_work，見第2步 |
+| `python scripts/check_rubric.py --batch <yyyymm> [--rubric <評閱標準檔>] [--show-text]` | 依「評閱標準 xlsx（最新版本）＞ scoring_checks.md ＞ engine py」檢查。**比對的評閱標準**：`--batch` 必填，比對 `<資料根目錄>/grading/training_internal/S06_<yyyymm>/01_template/S06_excel_scoring_criteria_v*.xlsx` 版本號最大的那份（試評用的標準解答檔、題目檔也取自同一個 01_template）；`--rubric` 可改用指定的檔案。檢查四項：評閱標準版本（assets 必須有內容相同的同一份，因為 MCP 評分用的是 assets 那份）、小項與配分、評分標準文字裡的關鍵數值（範圍、儲存格、標籤、門檻）與 engine 常數及 scoring_checks.md 是否一致、用 engine 試評標準解答檔（基本配分應全拿；需要 repo 的 mcp-server/src）。輸入檔只讀；結果與各小項評分標準文字寫成 `<梯次>/02_work/rubric/S06_excel_scoring_criteria_<yyyymmdd_HHMMSS>.md`（資料夾不存在會建立），供人工比對語意；`--show-text` 也會在終端機列出評分標準文字 |
 
 梯次的 01_template 有多個版本（_v1、_v2）時，手動評分一律取版本號最大的。
 要注意兩個工具不會跟著換版本：

@@ -15,12 +15,23 @@ import re
 
 from kd_mcp.core.grading.models import GradeResult, ItemScore, StudentInfo
 from .extract_rubric import builtin_rubric_map
+from .extract_submission import (GRADES_BORDER_RANGE, GRADES_EMPTY_CELL, GRADES_TITLE,
+                                 GRADES_TITLE_RANGE, SALARY_SOURCE_RANGE)
 
-VEHICLE_CATEGORIES = {"福特", "賓士", "裕隆", "三菱"}
-VEHICLE_SERIES = {"一月", "二月", "三月"}
-GENERAL_CATEGORIES = {"統帥", "武力", "智力", "政治", "魅力"}
-GENERAL_SERIES = {"趙雲", "周瑜", "程遠志", "劉禪"}
-DEPARTMENTS = {"業務", "會計", "門市"}
+# Values named by the 評閱標準 (scripts/check_rubric.py compares these with the xlsx).
+DEPARTMENTS = {"業務", "會計", "門市"}      # 1.2 欄標籤
+KEEP_DEPARTMENT = "業務"                    # 1.2 只留下
+ROW_LABELS = {"男", "女"}                   # 1.2 列標籤
+FREEZE_CELL = "B3"                          # 2.1
+AVG_COLUMN = "G"                            # 2.4 個人平均
+FILTER_VALUE = 70                           # 2.4 大於 / 大於或等於
+FILTERED_ROWS = 9                           # 2.4 8位學生加上班平均
+VEHICLE_CATEGORIES = {"福特", "賓士", "裕隆", "三菱"}   # 3.2
+VEHICLE_Y_MAX = 2000                        # 3.2 最大值
+VEHICLE_Y_MAJOR_UNIT = 500                  # 3.2 主要單位
+VEHICLE_SERIES = {"一月", "二月", "三月"}               # 3.3
+GENERAL_CATEGORIES = {"統帥", "武力", "智力", "政治", "魅力"}   # 4.2
+GENERAL_SERIES = {"趙雲", "周瑜", "程遠志", "劉禪"}             # 4.2
 
 # chart XML element -> name used in the 評閱結果說明
 CHART_NAMES = {
@@ -80,8 +91,8 @@ class _Builder:
 # ── 考題1 ──────────────────────────────────────────────────────────────────
 
 _REJECT_NOTES = {
-    "wrong_range": "來源範圍是【{source_sheet}】{source_range}，不是 A1:J13",
-    "other_sheet": "來源是【{source_sheet}】{source_range}，不是【薪資】A1:J13",
+    "wrong_range": "來源範圍是【{source_sheet}】{source_range}，不是 " + SALARY_SOURCE_RANGE,
+    "other_sheet": "來源是【{source_sheet}】{source_range}，不是【薪資】" + SALARY_SOURCE_RANGE,
     "unresolved": "來源「{source_name_or_range}」無法判讀是哪個活頁與範圍",
 }
 
@@ -96,24 +107,25 @@ def _score_salary(b: _Builder, pivot: dict | None, rejected: list[dict], sheet_p
             found = "；".join(f"【{r['host_sheet']}】的樞紐表" + _REJECT_NOTES[r["reason"]].format(**r)
                              for r in rejected)
             review = any(r["reason"] == "unresolved" for r in rejected)
-            b.zero_all(codes, f"沒有以【薪資】A1:J13 為來源的樞紐表（{found}），考題1全部0分。"
+            b.zero_all(codes, f"沒有以【薪資】{SALARY_SOURCE_RANGE} 為來源的樞紐表（{found}），考題1全部0分。"
                        + ("請人工確認來源。" if review else ""), review)
         else:
             b.zero_all(codes, "未建立以【薪資】資料為來源的樞紐表（已排除【考題】活頁範例），考題1全部0分。")
         return
 
-    b.add("1.1", 5, f"已在【{pivot.get('host_sheet')}】活頁建立以【薪資】A1:J13 為來源的樞紐表。")
+    b.add("1.1", 5, f"已在【{pivot.get('host_sheet')}】活頁建立以【薪資】{SALARY_SOURCE_RANGE} 為來源的樞紐表。")
 
     rows = _clean_set(pivot.get("row_visible_labels"))
     cols = _clean_set(pivot.get("col_visible_labels"))
+    depts, sexes = "、".join(sorted(DEPARTMENTS)), "、".join(sorted(ROW_LABELS))
     if not cols or not set(cols) <= DEPARTMENTS:
-        b.add("1.2", 0, f"欄標籤為 {cols or '未設定'}，不是業務、會計、門市，直接給0分。")
-    elif len(rows) != 2 or set(rows) != {"男", "女"}:
-        b.add("1.2", 0, f"列標籤為 {rows or '未設定'}，不是男、女，直接給0分。")
-    elif cols == ["業務"]:
-        b.add("1.2", 10, "欄標籤只篩出「業務」；列標籤為男、女。")
+        b.add("1.2", 0, f"欄標籤為 {cols or '未設定'}，不是{depts}，直接給0分。")
+    elif len(rows) != len(ROW_LABELS) or set(rows) != ROW_LABELS:
+        b.add("1.2", 0, f"列標籤為 {rows or '未設定'}，不是{sexes}，直接給0分。")
+    elif cols == [KEEP_DEPARTMENT]:
+        b.add("1.2", 10, f"欄標籤只篩出「{KEEP_DEPARTMENT}」；列標籤為{sexes}。")
     else:
-        b.add("1.2", 5, f"欄標籤為 {cols}，未只留下「業務」，扣5分；列標籤為男、女。")
+        b.add("1.2", 5, f"欄標籤為 {cols}，未只留下「{KEEP_DEPARTMENT}」，扣5分；列標籤為{sexes}。")
 
     subtotal = (pivot.get("data_fields") or [{}])[0].get("subtotal")
     if subtotal == "average":
@@ -147,12 +159,13 @@ def _score_grades(b: _Builder, g: dict | None, sheet_problem: str | None):
         return
 
     fp = g.get("freeze_panes")
+    want_col, want_row = re.fullmatch(r"([A-Z]+)(\d+)", FREEZE_CELL).groups()
     m = re.fullmatch(r"([A-Z]+)(\d+)", fp or "")
-    col_ok = bool(m) and m.group(1) == "B"
-    row_ok = bool(m) and m.group(2) == "3"
-    known = fp in (None, "A1", "B3", "A3", "B1")
+    col_ok = bool(m) and m.group(1) == want_col
+    row_ok = bool(m) and m.group(2) == want_row
+    known = fp in (None, "A1", FREEZE_CELL, f"A{want_row}", f"{want_col}1")
     if col_ok and row_ok:
-        b.add("2.1", 4, "凍結窗格設在B3，科目列與姓名欄皆固定。")
+        b.add("2.1", 4, f"凍結窗格設在{FREEZE_CELL}，科目列與姓名欄皆固定。")
     else:
         parts = []
         if row_ok:
@@ -164,20 +177,21 @@ def _score_grades(b: _Builder, g: dict | None, sheet_problem: str | None):
 
     # 合併後置中 on exactly A1:G1 and the title text are scored separately (2 + 2)
     a1_merge = g.get("a1_merged_range")
+    rng = GRADES_TITLE_RANGE
     if g.get("a1_merge_and_center"):
-        merge_pts, merge_note = 2, "A1:G1 已合併後置中"
-    elif a1_merge and a1_merge != "A1:G1":
-        merge_pts, merge_note = 0, f"合併範圍為 {a1_merge}，不是剛好 A1:G1"
+        merge_pts, merge_note = 2, f"{rng} 已合併後置中"
+    elif a1_merge and a1_merge != rng:
+        merge_pts, merge_note = 0, f"合併範圍為 {a1_merge}，不是剛好 {rng}"
     elif a1_merge and g.get("a1_horizontal") == "centerContinuous":
-        merge_pts, merge_note = 0, "A1:G1 已合併，但對齊是跨欄置中，不是合併後置中"
+        merge_pts, merge_note = 0, f"{rng} 已合併，但對齊是跨欄置中，不是合併後置中"
     elif a1_merge:
-        merge_pts, merge_note = 0, "A1:G1 已合併但未置中"
+        merge_pts, merge_note = 0, f"{rng} 已合併但未置中"
     elif g.get("a1_horizontal") == "centerContinuous":
         merge_pts, merge_note = 0, "A1 只設跨欄置中、未合併儲存格"
     else:
-        merge_pts, merge_note = 0, "A1:G1 未合併後置中"
+        merge_pts, merge_note = 0, f"{rng} 未合併後置中"
     if g.get("header_text_preserved"):
-        title_pts, title_note = 2, "標題文字為「經濟甲班 期中考成績表」"
+        title_pts, title_note = 2, f"標題文字為「{GRADES_TITLE}」"
     else:
         title_pts, title_note = 0, f"標題文字被改為「{g.get('a1_value')}」"
     b.add("2.2", merge_pts + title_pts, f"{merge_note}；{title_note}。")
@@ -200,7 +214,7 @@ def _score_grades(b: _Builder, g: dict | None, sheet_problem: str | None):
 
     # 排序看結果：G3:G15 由大到小；沒有快取值時才退回看 sortState
     sorts = g.get("sort_conditions") or []
-    state_ok = any(s.get("descending") and (s.get("ref") or "").startswith("G") for s in sorts)
+    state_ok = any(s.get("descending") and (s.get("ref") or "").startswith(AVG_COLUMN) for s in sorts)
     desc = g.get("g_values_descending")
     sort_ok = desc if desc is not None else state_ok
     sort_review = desc is None and not state_ok
@@ -212,36 +226,37 @@ def _score_grades(b: _Builder, g: dict | None, sheet_problem: str | None):
 
     filters = g.get("filter_conditions") or []
     # 數字篩選 on 個人平均 (column G); > 70 and >= 70 both count
-    gt70 = [f for f in filters if f.get("column") == "G" and _num_eq(f.get("val"), 70)
+    gt70 = [f for f in filters if f.get("column") == AVG_COLUMN and _num_eq(f.get("val"), FILTER_VALUE)
             and f.get("operator") in ("greaterThan", "greaterThanOrEqual")]
     visible = g.get("visible_data_rows")
-    filter_ok = bool(gt70) and visible == 9
+    filter_ok = bool(gt70) and visible == FILTERED_ROWS
     if gt70:
-        op = ">70" if gt70[0]["operator"] == "greaterThan" else "≥70"
-        filter_note = (f"已篩選個人平均 {op}，留下9列資料" if filter_ok
-                       else f"篩選條件為個人平均 {op}，但最後留下 {visible} 列（應為8位學生加班平均共9列）")
+        op = (">" if gt70[0]["operator"] == "greaterThan" else "≥") + str(FILTER_VALUE)
+        filter_note = (f"已篩選個人平均 {op}，留下{FILTERED_ROWS}列資料" if filter_ok
+                       else f"篩選條件為個人平均 {op}，但最後留下 {visible} 列"
+                            f"（應為學生加班平均共{FILTERED_ROWS}列）")
     elif any(f.get("operator") == "values" for f in filters):
-        filter_note = "個人平均是勾選數值清單篩選，不是「數字篩選 > 70」"
-    elif any(f.get("column") != "G" for f in filters):
+        filter_note = f"個人平均是勾選數值清單篩選，不是「數字篩選 > {FILTER_VALUE}」"
+    elif any(f.get("column") != AVG_COLUMN for f in filters):
         filter_note = "篩選條件設在個人平均以外的欄位"
     elif filters:
         filter_note = f"篩選條件為 {filters}"
     else:
-        filter_note = "未設定 >70 篩選"
+        filter_note = f"未設定 >{FILTER_VALUE} 篩選"
     b.add("2.4", (5 if sort_ok else 0) + (5 if filter_ok else 0), f"{sort_note}；{filter_note}。",
           sort_review)
 
     if g.get("borders_complete"):
-        b.add("2.5", 3, "A1:G16 範圍皆有框線。")
+        b.add("2.5", 3, f"{GRADES_BORDER_RANGE} 範圍皆有框線。")
     else:
         missing = g.get("missing_border_cells") or []
-        b.add("2.5", 0, f"A1:G16 有 {len(missing)} 格未設框線（例：{', '.join(missing[:5])}）。")
+        b.add("2.5", 0, f"{GRADES_BORDER_RANGE} 有 {len(missing)} 格未設框線（例：{', '.join(missing[:5])}）。")
 
     cell = g.get("g16_cell") or {}
     if cell.get("is_empty"):
-        b.add("2.6", 3, "G16 未填入公式、數值或文字，額外加分。")
+        b.add("2.6", 3, f"{GRADES_EMPTY_CELL} 未填入公式、數值或文字，額外加分。")
     else:
-        b.add("2.6", 0, f"G16 有公式、數值或文字（{cell.get('value')}），不給額外加分。")
+        b.add("2.6", 0, f"{GRADES_EMPTY_CELL} 有公式、數值或文字（{cell.get('value')}），不給額外加分。")
 
 
 # ── 考題3 / 考題4 ──────────────────────────────────────────────────────────
@@ -300,12 +315,14 @@ def _score_vehicle(b: _Builder, chart: dict | None, raw: dict | None, chartex: i
 
     cats = _clean_set(chart.get("categories"))
     cat_ok = _exact_set(cats, VEHICLE_CATEGORIES)
-    axis_ok = _num_eq(chart.get("y_max"), 2000) and _num_eq(chart.get("y_major_unit"), 500)
+    axis_ok = (_num_eq(chart.get("y_max"), VEHICLE_Y_MAX)
+               and _num_eq(chart.get("y_major_unit"), VEHICLE_Y_MAJOR_UNIT))
     grid_ok = bool(chart.get("gridlines_none"))
     notes = [
         "類別軸為四個廠牌" if cat_ok else f"類別軸為 {cats}（應為福特/賓士/裕隆/三菱）",
-        "數值軸最大值2000、主要單位500" if axis_ok
-        else f"數值軸最大值 {chart.get('y_max')}、主要單位 {chart.get('y_major_unit')}（應為2000/500）",
+        f"數值軸最大值{VEHICLE_Y_MAX}、主要單位{VEHICLE_Y_MAJOR_UNIT}" if axis_ok
+        else (f"數值軸最大值 {chart.get('y_max')}、主要單位 {chart.get('y_major_unit')}"
+              f"（應為{VEHICLE_Y_MAX}/{VEHICLE_Y_MAJOR_UNIT}）"),
         "主要格線已設為無" if grid_ok else "主要格線未移除",
     ]
     b.add("3.2", 5 * (cat_ok + axis_ok + grid_ok), "；".join(notes) + "。")

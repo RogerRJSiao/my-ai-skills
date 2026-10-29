@@ -58,7 +58,8 @@
     ├── init_batch.py                              # 建立梯次資料夾並複製樣板
     ├── check_batch.py                             # 評分前檢查梯次資料夾
     ├── copy_to_work.py                            # 合規作業檔複製到 02_work（不解壓縮）
-    └── build_all_report.py                        # 產出三科 學員檔案與成績計算（manifest＋score）
+    ├── build_all_report.py                        # 產出三科 學員檔案與成績計算（manifest＋score）
+    └── check_rubric.py                            # 檢查 scoring_checks.md 與 engine 是否符合評閱標準 xlsx（比對梯次 01_template，報告寫到 02_work/rubric/）
 ```
 
 ## 設計原則
@@ -66,7 +67,10 @@
 - **評分依據以「評閱標準」文字敘述為準**：不是拿學生檔案跟標準解答檔逐格
   diff，因為同一評分標準底下可能有多種合格的呈現方式。
 - **標準的優先順序是 評閱標準 xlsx（最新版本）＞ `scoring_checks.md` ＞ `engine/` 的 py**：
-  md 與 py 都照 xlsx 撰寫；三者不一致時以 xlsx 為準，修改 md 與 py。
+  md 與 py 都照 xlsx 撰寫；三者不一致時以 xlsx 為準，修改 md 與 py。可用
+  `python scripts/check_rubric.py --batch <yyyymm>` 檢查配分與關鍵數值是否一致（語意仍需人工對照）。
+  評分標準裡的範圍、儲存格、標籤、門檻都寫成 engine 的具名常數（例如
+  `SALARY_SOURCE_RANGE`、`FREEZE_CELL`），這支腳本就是比對這些常數。
 - **`engine/extract_submission.py` 只萃取客觀事實，不計分**：樞紐表設定、圖表動態性、
   凍結窗格、合併儲存格、框線、排序/篩選、公式等。純 skill 使用時由模型依
   `scoring_checks.md` 的規則判斷得分；透過 MCP 時由 `engine/score_submission.py`

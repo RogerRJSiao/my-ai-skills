@@ -59,6 +59,12 @@ RAW_DATA_CELLS = {
 # The 薪資 data a qualifying pivot must use (rubric 1.1).
 SALARY_SOURCE_RANGE = "A1:J13"
 
+# 考題2 成績 cells named by the rubric (scripts/check_rubric.py compares these with the xlsx).
+GRADES_TITLE = "經濟甲班 期中考成績表"   # 2.2
+GRADES_TITLE_RANGE = "A1:G1"           # 2.2 合併後置中
+GRADES_BORDER_RANGE = "A1:G16"         # 2.5
+GRADES_EMPTY_CELL = "G16"              # 2.6
+
 
 # ── workbook loading ─────────────────────────────────────────────────────
 
@@ -518,13 +524,14 @@ def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES, wb_va
         )
         row_avg_integer_fmt = all(shows_integer(ws.cell(row=avg_row, column=c)) for c in range(2, 7))
     # rubric 2.6 names the single cell G16, wherever 班平均 ends up
-    g16 = ws["G16"]
+    g16 = ws[GRADES_EMPTY_CELL]
     g16_cell = {"value": g16.value, "is_empty": g16.value in (None, "")}
 
     # rubric 2.5 names the fixed range A1:G16
+    min_col, min_row, max_col, max_row = range_boundaries(GRADES_BORDER_RANGE)
     missing_border = []
-    for r in range(1, 17):
-        for col in range(1, 8):
+    for r in range(min_row, max_row + 1):
+        for col in range(min_col, max_col + 1):
             b = ws.cell(row=r, column=col).border
             if not (b.top.style or b.bottom.style or b.left.style or b.right.style):
                 missing_border.append(ws.cell(row=r, column=col).coordinate)
@@ -565,8 +572,8 @@ def grades_sheet_info(wb, xlsx_path: Path, sheet_name: str = SHEET_GRADES, wb_va
         "a1_merged_range": a1_merged,
         "a1_horizontal": a1_horizontal,
         # 合併後置中 (rubric 2.2): A1:G1 merged and 水平置中 (跨欄置中 does not count)
-        "a1_merge_and_center": a1_merged == "A1:G1" and a1_horizontal == "center",
-        "header_text_preserved": a1_val == "經濟甲班 期中考成績表",
+        "a1_merge_and_center": a1_merged == GRADES_TITLE_RANGE and a1_horizontal == "center",
+        "header_text_preserved": a1_val == GRADES_TITLE,
         "avg_row_index": avg_row,
         "g3_g15_average_formulas_ok": g_formulas_ok,
         "row_avg_formulas_ok": row_avg_formulas_ok,
